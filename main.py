@@ -6,7 +6,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from utils.data_contract import DataContract
-from utils.drive_upload import DriveUploadError, upload_to_drive
+from utils.drive_upload import DRIVE_FOLDER_ID, DriveUploadError, upload_to_drive
 
 app = FastAPI()
 
@@ -87,18 +87,27 @@ async def process_data(
     with open("output.json", "w", encoding="utf-8") as f:
         json.dump(output_data, f)
 
+    csv_id = None
+    json_id = None
+    upload_error = None
+
     try:
         csv_id = upload_to_drive("temp_data.csv", "temp_data.csv")
         json_id = upload_to_drive("output.json", "output.json")
-    except DriveUploadError as exc:
-        raise HTTPException(status_code=500, detail=f"Drive upload failed: {exc}") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Drive upload failed: {exc}") from exc
+    except (DriveUploadError, Exception) as exc:
+        # Do not fail data processing if Drive upload is unavailable.
+        upload_error = str(exc)
 
     return {
-        "message": "Files uploaded to Drive",
+        "message": "Data processed",
+        "drive_folder_id": DRIVE_FOLDER_ID,
         "drive_file_ids": {
             "csv": csv_id,
             "json": json_id,
         },
+        "drive_file_links": {
+            "csv": f"https://drive.google.com/file/d/{csv_id}/view" if csv_id else None,
+            "json": f"https://drive.google.com/file/d/{json_id}/view" if json_id else None,
+        },
+        "upload_error": upload_error,
     }
