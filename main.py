@@ -1,5 +1,7 @@
 from io import StringIO
+from datetime import datetime
 import json
+from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -81,10 +83,17 @@ async def process_data(
         },
     }
 
-    with open("temp_data.csv", "wb") as f:
+    # Generate unique file names per request so every upload is a new Drive file.
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    source_stem = Path(file.filename).stem or "uploaded_data"
+    safe_stem = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in source_stem)
+    csv_name = f"{safe_stem}_{timestamp}.csv"
+    json_name = f"{safe_stem}_{timestamp}_output.json"
+
+    with open(csv_name, "wb") as f:
         f.write(raw_bytes)
 
-    with open("output.json", "w", encoding="utf-8") as f:
+    with open(json_name, "w", encoding="utf-8") as f:
         json.dump(output_data, f)
 
     csv_id = None
@@ -92,15 +101,20 @@ async def process_data(
     upload_error = None
 
     try:
-        csv_id = upload_to_drive("temp_data.csv", "temp_data.csv")
-        json_id = upload_to_drive("output.json", "output.json")
+        csv_id = upload_to_drive(csv_name, csv_name)
+        json_id = upload_to_drive(json_name, json_name)
     except (DriveUploadError, Exception) as exc:
         # Do not fail data processing if Drive upload is unavailable.
         upload_error = str(exc)
+        print("Drive upload failed:", upload_error)
 
     return {
         "message": "Data processed",
         "drive_folder_id": DRIVE_FOLDER_ID,
+        "uploaded_file_names": {
+            "csv": csv_name,
+            "json": json_name,
+        },
         "drive_file_ids": {
             "csv": csv_id,
             "json": json_id,

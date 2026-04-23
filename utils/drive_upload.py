@@ -13,7 +13,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 OAUTH_TOKEN_FILE = Path(
     os.getenv("GOOGLE_OAUTH_TOKEN_FILE", "googledriveapi_key/oauth_token.json")
 )
-DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "1a8U4aAbiRrNxMWhYJGziJb2GZ8dvJLuv").strip()
+DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "1smLD7ZhqvPHHc9v72OtxKJn_EJCnKSfX").strip()
 
 
 class DriveUploadError(Exception):
