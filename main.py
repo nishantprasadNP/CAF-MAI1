@@ -6,6 +6,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from utils.data_contract import DataContract
+from utils.drive_upload import DriveUploadError, upload_to_drive
 
 app = FastAPI()
 
@@ -68,7 +69,7 @@ async def process_data(
     x_preview = data["X"].head(5).where(pd.notna(data["X"].head(5)), None).to_dict(orient="records")
     y_preview = data["Y"].head(5).where(pd.notna(data["Y"].head(5)), None).tolist()
 
-    return {
+    output_data = {
         "X": x_preview,
         "Y": y_preview,
         "B_user": list(data.get("B_user", [])),
@@ -77,5 +78,27 @@ async def process_data(
         "metadata": {
             "column_types": dict(data.get("metadata", {}).get("column_types", {})),
             "target_type": str(data.get("metadata", {}).get("target_type", "")),
+        },
+    }
+
+    with open("temp_data.csv", "wb") as f:
+        f.write(raw_bytes)
+
+    with open("output.json", "w", encoding="utf-8") as f:
+        json.dump(output_data, f)
+
+    try:
+        csv_id = upload_to_drive("temp_data.csv", "temp_data.csv")
+        json_id = upload_to_drive("output.json", "output.json")
+    except DriveUploadError as exc:
+        raise HTTPException(status_code=500, detail=f"Drive upload failed: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Drive upload failed: {exc}") from exc
+
+    return {
+        "message": "Files uploaded to Drive",
+        "drive_file_ids": {
+            "csv": csv_id,
+            "json": json_id,
         },
     }
