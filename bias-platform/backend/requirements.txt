@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+numpy
+scikit-learn
+xgboost
+python-multipart
+google-api-python-client
+google-auth
+google-auth-oauthlib

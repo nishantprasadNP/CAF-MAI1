@@ -1,1 +1,0 @@
-backend run:uvicorn main:app --reload
