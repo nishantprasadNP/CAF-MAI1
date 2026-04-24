@@ -16,6 +16,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)) -> dict:
     if not file.filename.lower().endswith(".csv"):
@@ -46,7 +51,8 @@ def select_bias(payload: SelectBiasRequest) -> dict:
 @app.post("/run_pipeline")
 def run_pipeline() -> dict:
     try:
-        return pipeline.run_pipeline()
+        pipeline.run_pipeline()
+        return {"status": "completed"}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
