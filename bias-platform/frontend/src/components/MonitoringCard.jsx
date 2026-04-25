@@ -5,22 +5,30 @@ function classifyDrift(value) {
 }
 
 function MonitoringCard({ monitoring }) {
-  const alertClass = monitoring.alerts === "None" ? "risk-safe" : "risk-moderate";
+  const dataDrift = monitoring?.data_drift ?? 0;
+  const biasDrift = monitoring?.bias_drift ?? 0;
+
   return (
     <div className="result-card">
       <h3>Monitoring (Module 11)</h3>
-      <p className={classifyDrift(monitoring.dataDrift)}>
-        <strong>Data Drift:</strong> {monitoring.dataDrift.toFixed(2)} ({monitoring.dataDriftLabel})
+
+      <p className={classifyDrift(dataDrift)}>
+        <strong>Data Drift:</strong> {dataDrift.toFixed(2)}
       </p>
-      <p className={classifyDrift(monitoring.biasDrift)}>
-        <strong>Bias Drift:</strong> {monitoring.biasDrift.toFixed(2)} ({monitoring.biasDriftLabel})
+
+      <p className={classifyDrift(biasDrift)}>
+        <strong>Bias Drift:</strong> {biasDrift.toFixed(2)}
       </p>
+
       <p>
-        <strong>Bias Drift Trend:</strong> {monitoring.previousBiasDrift.toFixed(2)} {"->"}{" "}
-        {monitoring.currentBiasDrift.toFixed(2)}
+        <strong>Trend:</strong> {monitoring?.trend || "stable"}
       </p>
-      <p className={alertClass}>
-        <strong>Alerts:</strong> {monitoring.alerts}
+
+      <p>
+        <strong>Alerts:</strong>{" "}
+        {monitoring?.alerts?.length
+          ? monitoring.alerts.join(", ")
+          : "None"}
       </p>
     </div>
   );

@@ -6,17 +6,16 @@ def compute_bias_gap(subgroup_metrics):
         column_gaps = {}
 
         for metric in metric_names:
-            values = []
-
-            for subgroup_metrics_dict in subgroup_data.values():
-                metric_value = subgroup_metrics_dict.get(metric)
-                if metric_value is None:
-                    continue
-                values.append(metric_value)
+            values = [
+                subgroup_metrics_dict.get(metric)
+                for subgroup_metrics_dict in subgroup_data.values()
+                if isinstance(subgroup_metrics_dict.get(metric), (int, float))
+            ]
 
             if values:
                 column_gaps[f"{metric}_gap"] = max(values) - min(values)
 
-        bias_gap[bias_column] = column_gaps
+        if column_gaps:
+            bias_gap[bias_column] = column_gaps
 
     return bias_gap

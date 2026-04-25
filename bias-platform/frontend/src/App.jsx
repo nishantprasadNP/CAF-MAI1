@@ -178,13 +178,14 @@ function App() {
         {results && (
           <ContextPanel
             contextInput={contextInput}
+            contextResult={results.context}
             loading={loading}
             onContextChange={(field, value) => setContextInput((prev) => ({ ...prev, [field]: value }))}
             onApplyContext={onSetContext}
           />
         )}
 
-        {results && <ResultsDashboard results={{ ...results, context }} contextApplied={contextApplied} />}
+        {results && <ResultsDashboard results={results} contextApplied={contextApplied} />}
 
         {error && <p className="error">{error}</p>}
         {loading && <p className="muted">Working on current step...</p>}

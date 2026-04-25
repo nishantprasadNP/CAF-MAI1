@@ -16,53 +16,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 app.include_router(module7_router)
 app.include_router(module8_router)
 
 
 @app.get("/health")
-def health() -> dict:
+def health():
     return {"status": "ok"}
 
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...)) -> dict:
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are supported.")
+async def upload(file: UploadFile = File(...)):
     try:
         content = await file.read()
         return pipeline.upload_data(content)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to upload dataset: {exc}") from exc
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/init_contract")
-def init_contract(payload: InitContractRequest) -> dict:
+def init_contract(payload: InitContractRequest):
     try:
         return pipeline.initialize_contract(payload.target_column)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/select_bias")
-def select_bias(payload: SelectBiasRequest) -> dict:
+def select_bias(payload: SelectBiasRequest):
     try:
         return pipeline.select_bias(payload.bias_columns)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/run_pipeline")
-def run_pipeline() -> dict:
+def run_pipeline():
     try:
-        pipeline.run_pipeline()
-        return {"status": "completed"}
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return pipeline.run_pipeline()
+    except Exception as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/results")
-def get_results() -> dict:
+def results():
     if pipeline.results is None:
-        raise HTTPException(status_code=404, detail="No pipeline results available yet.")
+        raise HTTPException(404, "Run pipeline first")
     return pipeline.results

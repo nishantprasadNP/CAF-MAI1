@@ -94,9 +94,12 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
     if isinstance(module5_results, dict):
         before_metrics = module5_results.get("fairness_metrics", {})
     
+    original_probs = weighted_output.get("probabilities", [])
+    new_probs = resampled_output.get("probabilities", [])
+
     validation = validate_debiasing(
-        before_metrics,
-        new_fairness_metrics
+        original_probs,
+        new_probs,
     )
     
     # Step 7: Return orchestration results.
