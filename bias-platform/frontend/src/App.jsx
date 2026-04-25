@@ -15,6 +15,17 @@ const steps = [
   "View Decision Dashboard",
 ];
 
+function formatApiError(err, fallbackMessage) {
+  const detail = err?.response?.data?.detail;
+  const message = typeof detail === "string" ? detail : "";
+
+  if (message.includes("Encoders require their input argument must be uniformly strings or numbers")) {
+    return "Data preprocessing failed because one or more columns contain mixed value types. Please normalize those columns in the CSV and try again.";
+  }
+
+  return message || fallbackMessage;
+}
+
 function App() {
   const [step, setStep] = useState(0);
   const [file, setFile] = useState(null);
@@ -53,7 +64,7 @@ function App() {
       setTargetColumn(data.columns?.[data.columns.length - 1] || "");
       setStep(1);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Upload failed.");
+      setError(formatApiError(err, "Upload failed."));
     } finally {
       setLoading(false);
     }
@@ -72,7 +83,7 @@ function App() {
       setSelectedBias([]);
       setStep(1);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Contract initialization failed.");
+      setError(formatApiError(err, "Contract initialization failed."));
     } finally {
       setLoading(false);
     }
@@ -86,7 +97,7 @@ function App() {
       setContract((prev) => ({ ...prev, ...data }));
       setStep(2);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Bias selection failed.");
+      setError(formatApiError(err, "Bias selection failed."));
     } finally {
       setLoading(false);
     }
@@ -102,7 +113,7 @@ function App() {
       setContextApplied(false);
       setStep(3);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Pipeline run failed.");
+      setError(formatApiError(err, "Pipeline run failed."));
     } finally {
       setLoading(false);
     }
@@ -120,7 +131,7 @@ function App() {
       setContextApplied(true);
       setStep(5);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Failed to apply context and rerun final inference.");
+      setError(formatApiError(err, "Failed to apply context and rerun final inference."));
     } finally {
       setLoading(false);
     }

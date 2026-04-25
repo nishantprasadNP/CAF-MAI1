@@ -13,6 +13,7 @@ from app.modules.module6.service import run_module6
 from app.modules.module7.schema import ContextSchema
 from app.modules.module7.service import (
     apply_context_probabilities,
+    compute_context_impact,
     context_confidence,
     context_service,
 )
@@ -150,6 +151,9 @@ class BiasPipeline:
 
             base_probs = [float(p) for p in probs[0]] if probs else [0.5, 0.5]
             debiased_probs = _extract_debiased_probabilities(base_probs, module6)
+            probability_adjustment = module6.get("probability_adjustment", {}) if isinstance(module6, dict) else {}
+            if isinstance(probability_adjustment, dict) and probability_adjustment.get("debiased_probabilities"):
+                debiased_probs = _normalize_probs(probability_adjustment.get("debiased_probabilities", debiased_probs))
 
             # -------- MODULE 7 -------- #
             context = context_service.get_context() or ContextSchema.validate({
@@ -163,19 +167,17 @@ class BiasPipeline:
 
             final_probs = apply_context_probabilities(debiased_probs, context) or debiased_probs
             final_probs = [float(p) for p in final_probs]
-            ctx = context_confidence(context)
-
-            if isinstance(ctx, tuple) and len(ctx) >= 2:
-                context_conf, reason = ctx[0], ctx[1]
-            elif isinstance(ctx, dict):
-                context_conf = ctx.get("confidence", "unknown")
-                reason = ctx.get("reason", "")
-            else:
-                context_conf, reason = "unknown", ""
+            features = module4.get("model", {}).get("feature_importance", {})
+            dominant_feature = next(iter(features.keys()), "context")
+            context_payload = compute_context_impact(
+                base_probs=debiased_probs,
+                context_probs=final_probs,
+                dominant_feature=str(dominant_feature),
+            )
+            context_conf = context_payload.get("confidence") or context_confidence(context)
+            reason = context_payload.get("reason", "")
 
             # -------- MODULE 8 -------- #
-            features = module4.get("model", {}).get("feature_importance", {})
-
             decision = run_module8(
                 probabilities=final_probs,
                 original_probabilities=debiased_probs,
@@ -199,6 +201,8 @@ class BiasPipeline:
                 role="analyst",
                 action="run_pipeline",
                 decision=decision.get("decision", "reject"),
+                bias_risk=decision.get("bias_flag", "low"),
+                context_confidence=context_conf,
             )
 
             # -------- MODULE 11 -------- #
@@ -220,8 +224,10 @@ class BiasPipeline:
                     "values": context,
                     "confidence": context_conf,
                     "reason": reason,
-                    "base_probability": debiased_probs,
-                    "final_probability": final_probs,
+                    "base_probability": context_payload.get("base_probability", debiased_probs),
+                    "final_probability": context_payload.get("final_probability", final_probs),
+                    "impact": context_payload.get("impact", 0.0),
+                    "cbas": context_payload.get("cbas", 0.0),
                 },
             })
 

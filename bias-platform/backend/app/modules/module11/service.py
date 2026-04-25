@@ -49,13 +49,13 @@ def run_monitoring(
             current_bias = max(current_bias, *[float(v) for v in column_gaps.values() if isinstance(v, (int, float))], 0.0)
     previous_bias = float(_BIAS_HISTORY[-1]) if _BIAS_HISTORY else 0.0
     _BIAS_HISTORY.append(float(current_bias))
-    bias_drift = float(_BIAS_HISTORY[-1] - previous_bias) if len(_BIAS_HISTORY) > 1 else 0.0
+    bias_drift = abs(float(current_bias - previous_bias)) if len(_BIAS_HISTORY) > 1 else 0.0
 
     alerts: list[str] = []
     if data_drift > 0.1:
         alerts.append("data drift increasing")
-    if bias_drift > 0.1:
-        alerts.append("bias increasing over time")
+    if bias_drift > 0.2:
+        alerts.append("Bias increasing over time")
 
     if bias_columns and decision_output.get("decision") == "approve":
         counts = Counter(df[bias_columns[0]].astype(str).tolist()) if bias_columns[0] in df.columns else Counter()

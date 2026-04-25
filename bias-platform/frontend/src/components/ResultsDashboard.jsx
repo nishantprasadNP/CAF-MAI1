@@ -39,12 +39,15 @@ function ResultsDashboard({ results, contextApplied }) {
 
           <p>
             <strong>Impact:</strong>{" "}
-            {typeof results.context?.base_probability?.[1] === "number" &&
-            typeof results.context?.final_probability?.[1] === "number"
-              ? (
-                  results.context.final_probability[1] -
-                  results.context.base_probability[1]
-                ).toFixed(2)
+            {typeof results.context?.impact === "number"
+              ? results.context.impact.toFixed(2)
+              : "N/A"}
+          </p>
+
+          <p>
+            <strong>Bias Amplification (CBAS):</strong>{" "}
+            {typeof results.context?.cbas === "number"
+              ? results.context.cbas.toFixed(2)
               : "N/A"}
           </p>
 

@@ -22,6 +22,8 @@ def apply_compliance(
     role: str,
     action: str,
     decision: str,
+    bias_risk: str = "low",
+    context_confidence: str = "high",
 ) -> dict[str, Any]:
     if role not in ALLOWED_RUN_ROLES:
         raise ValueError(f"Policy violation: role '{role}' cannot run pipeline.")
@@ -48,8 +50,17 @@ def apply_compliance(
         "pii_removed": "passed" if len(audit_log["anonymized_columns_dropped"]) >= 0 else "unknown",
     }
 
+    violations = []
+    if str(bias_risk).lower() == "high":
+        violations.append("High bias risk")
+    if str(context_confidence).lower() == "low":
+        violations.append("Unreliable context")
+    status = "allowed" if not violations else "restricted"
+
     return {
         "compliant": True,
+        "status": status,
+        "violations": violations,
         "role_checks": {
             "can_run_pipeline": role in ALLOWED_RUN_ROLES,
             "can_view_bias_data": role in ALLOWED_BIAS_VIEW_ROLES,

@@ -60,7 +60,11 @@ def run_module5(df, y_true, y_pred, bias_columns):
     eo_values = []
 
     if isinstance(fairness_metrics, dict):
-        for column_groups in fairness_metrics.values():
+        for column_payload in fairness_metrics.values():
+            if not isinstance(column_payload, dict):
+                continue
+
+            column_groups = column_payload.get("groups", {})
             if not isinstance(column_groups, dict):
                 continue
 

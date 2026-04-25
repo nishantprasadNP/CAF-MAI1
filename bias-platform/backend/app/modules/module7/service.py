@@ -36,6 +36,47 @@ class ContextService:
 context_service = ContextService()
 
 
+def _safe_probability(probs: list[float], preferred_idx: int = 1) -> float:
+    if not probs:
+        return 0.0
+    idx = preferred_idx if len(probs) > preferred_idx else len(probs) - 1
+    try:
+        return float(probs[idx])
+    except Exception:
+        return 0.0
+
+
+def compute_context_impact(
+    *,
+    base_probs: list[float],
+    context_probs: list[float],
+    dominant_feature: str = "context",
+) -> dict:
+    base_bias = _safe_probability(base_probs)
+    context_bias = _safe_probability(context_probs)
+    context_delta = context_bias - base_bias
+    cbas = context_bias - base_bias
+
+    magnitude = abs(context_delta)
+    if magnitude > 0.2:
+        confidence = "high"
+    elif magnitude > 0.05:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    reason = f"{dominant_feature} increased prediction by {round(context_delta, 2)}"
+
+    return {
+        "base_probability": base_probs,
+        "final_probability": context_probs,
+        "impact": float(context_delta),
+        "cbas": float(cbas),
+        "confidence": confidence,
+        "reason": reason,
+    }
+
+
 def compute_context_weight(context: dict) -> float:
     weights = {
         "resource_level": {"low": 0.8, "medium": 1.0, "high": 1.1},
@@ -87,14 +128,23 @@ def calculate_bias_score(probabilities: list[float]) -> dict:
 
     result = context_service.apply_context_to_predictions(probabilities)
     adjusted = result["adjusted_probabilities"]
+    context_impact = compute_context_impact(
+        base_probs=probabilities,
+        context_probs=adjusted,
+        dominant_feature="context",
+    )
     bias_score = sum(abs(a - b) for a, b in zip(probabilities, adjusted)) / len(adjusted)
-    impact = _classify_bias_impact(bias_score)
+    bias_impact = _classify_bias_impact(bias_score)
 
     return {
         "original_probabilities": probabilities,
         "adjusted_probabilities": adjusted,
         "bias_score": bias_score,
-        "impact": impact,
+        "impact": bias_impact,
+        "context_delta": float(context_impact["impact"]),
+        "cbas": float(context_impact["cbas"]),
+        "confidence": context_impact["confidence"],
+        "reason": context_impact["reason"],
         "details": "Context altered prediction confidence",
     }
 

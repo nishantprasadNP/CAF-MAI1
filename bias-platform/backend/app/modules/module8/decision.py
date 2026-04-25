@@ -71,8 +71,10 @@ def run_module8(
     # ---------------- CONTEXT SHIFT ---------------- #
     if len(probabilities) == len(original_probabilities):
         shift = sum(abs(a - b) for a, b in zip(probabilities, original_probabilities)) / len(probabilities)
+        context_delta = probabilities[1] - original_probabilities[1] if len(probabilities) > 1 else 0.0
     else:
         shift = 0.0
+        context_delta = 0.0
 
     context_influence = _confidence_bucket(shift)
 
@@ -93,6 +95,10 @@ def run_module8(
         })
 
     top_feature_name = direction_features[0]["feature"] if direction_features else "key features"
+    top_features_breakdown = [
+        {"feature": str(name), "impact": float(score)}
+        for name, score in sorted(top_features.items(), key=lambda x: -x[1])[:5]
+    ]
 
     # ---------------- CONTRIBUTIONS ---------------- #
     feature_score_raw = sum(abs(v) for _, v in sorted_features)
@@ -132,6 +138,10 @@ def run_module8(
         "context_influence": context_influence,
         "explanation": explanation_text,
         "explanation_structured": explanation_structured,
+        "top_features": top_features_breakdown,
+        "contextContribution": round(abs(context_delta), 6),
+        "biasContribution": round(float(max_gap), 6),
+        "context_delta": round(float(context_delta), 6),
         "feature_importance": {f["feature"]: f["impact"] for f in direction_features},
         "probabilities": probabilities,
         "original_probabilities": original_probabilities,
