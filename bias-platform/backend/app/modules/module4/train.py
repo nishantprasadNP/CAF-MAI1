@@ -4,6 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
+from sklearn.calibration import CalibratedClassifierCV
 
 from app.modules.module4.preprocess import build_preprocessor, sanitize_dataset
 
@@ -43,12 +44,14 @@ def train_baseline_model(dataset: dict[str, Any], model_name: str = "logistic_re
         stratify=y_series if y_series.nunique(dropna=True) > 1 else None,
     )
 
-    pipeline = Pipeline(
+    base_pipeline = Pipeline(
         steps=[
             ("preprocessor", preprocessor),
             ("model", estimator),
         ]
     )
+    # Probability calibration for more reliable confidence scores.
+    pipeline = CalibratedClassifierCV(estimator=base_pipeline, method="sigmoid", cv=3)
     pipeline.fit(x_train, y_train)
     predictions = pipeline.predict(x_test)
 
@@ -59,8 +62,25 @@ def train_baseline_model(dataset: dict[str, Any], model_name: str = "logistic_re
         "f1_score": round(float(f1_score(y_test, predictions, average="weighted", zero_division=0)), 6),
     }
 
-    transformed = pipeline.named_steps["preprocessor"].transform(x_df)
+    transformed = base_pipeline.named_steps["preprocessor"].fit(x_df).transform(x_df)
     transformed_feature_count = transformed.shape[1]
+
+    feature_importance = {}
+    coefficients = {}
+    try:
+        fitted_base = pipeline.calibrated_classifiers_[0].estimator
+        model = fitted_base.named_steps.get("model")
+        if hasattr(model, "coef_"):
+            preprocessor_fit = fitted_base.named_steps["preprocessor"]
+            feature_names = preprocessor_fit.get_feature_names_out()
+            coef_values = model.coef_[0] if len(model.coef_.shape) > 1 else model.coef_
+            for name, value in zip(feature_names, coef_values):
+                coefficients[str(name)] = round(float(value), 6)
+                feature_importance[str(name)] = round(float(abs(value)), 6)
+    except Exception:
+        # Fallback silently; downstream can still operate without coefficients.
+        coefficients = {}
+        feature_importance = {}
 
     # Serializable result safe to return via /results.
     # The raw pipeline and x_test are NOT included here because sklearn objects
@@ -69,6 +89,8 @@ def train_baseline_model(dataset: dict[str, Any], model_name: str = "logistic_re
     # "_runtime" key and then drop it before storing in results.
     return {
         "model_name": model_name,
+        "model_type": model_name,
+        "calibrated": True,
         # Runtime objects needed by downstream modules – must be stripped
         # before the dict is handed to the aggregator / returned via API.
         "_runtime": {
@@ -80,6 +102,8 @@ def train_baseline_model(dataset: dict[str, Any], model_name: str = "logistic_re
         "y_test": y_test.tolist(),
         "predictions": predictions.tolist(),
         "metrics": metrics,
+        "coefficients": coefficients,
+        "feature_importance": feature_importance,
         "preprocessing": {
             "imputation": {
                 "numeric": "median",

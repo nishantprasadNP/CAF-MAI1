@@ -18,7 +18,11 @@ def run_module4(dataset: dict[str, Any], model_name: str = "logistic_regression"
     return {
         "model": {
             "name": train_result["model_name"],
+            "model_type": train_result.get("model_type", train_result["model_name"]),
+            "calibrated": bool(train_result.get("calibrated", False)),
             "metrics": train_result["metrics"],
+            "coefficients": train_result.get("coefficients", {}),
+            "feature_importance": train_result.get("feature_importance", {}),
         },
         "preprocessing": train_result["preprocessing"],
         "inference": {

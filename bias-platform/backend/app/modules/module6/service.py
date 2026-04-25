@@ -35,6 +35,36 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
             - resampled_results: Results from resampled model training
             - debiasing_effect: Validation comparing before and after metrics
     """
+    fairness_summary = module5_results.get("summary", {}) if isinstance(module5_results, dict) else {}
+    bias_gap = fairness_summary.get("bias_gap", 0.0) if isinstance(fairness_summary, dict) else 0.0
+    if not isinstance(bias_gap, (int, float)):
+        bias_gap = 0.0
+
+    # Step 0: Skip debiasing when fairness gap is already small.
+    if float(bias_gap) < 0.05:
+        return {
+            "status": "skipped",
+            "reason": "dataset already balanced",
+            "threshold": 0.05,
+            "weights_summary": {
+                "min": 1.0,
+                "max": 1.0,
+                "mean": 1.0,
+            },
+            "reweighted_results": {
+                "predictions": [],
+                "probabilities": [],
+            },
+            "resampled_results": {
+                "predictions": [],
+                "probabilities": [],
+            },
+            "debiasing_effect": {
+                "bias_reduction": {},
+                "fairness_improvement": {},
+            },
+        }
+
     # Step 1: Compute fairness-aware sample weights
     weights = compute_sample_weights(df, y_train, bias_columns)
     
@@ -75,6 +105,9 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
         return {k: v for k, v in d.items() if k != "_runtime"}
 
     return {
+        "status": "applied",
+        "reason": "debiasing applied due to fairness gap threshold",
+        "threshold": 0.05,
         "weights_summary": {
             "min": float(weights.min()),
             "max": float(weights.max()),

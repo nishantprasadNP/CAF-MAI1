@@ -1,6 +1,8 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.modules.module7.router import router as module7_router
+from app.modules.module8.router import router as module8_router
 from app.pipeline_controller import BiasPipeline
 from app.schemas import InitContractRequest, SelectBiasRequest
 
@@ -14,6 +16,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(module7_router)
+app.include_router(module8_router)
 
 
 @app.get("/health")

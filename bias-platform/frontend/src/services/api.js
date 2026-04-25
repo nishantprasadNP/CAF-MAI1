@@ -32,3 +32,25 @@ export async function getResults() {
   const response = await axios.get(`${API_BASE}/results`);
   return response.data;
 }
+
+export async function setContext(data) {
+  const response = await axios.post(`${API_BASE}/context`, data);
+  return response.data;
+}
+
+// Deprecated: prefer context + runPipeline + getResults flow.
+export async function applyContext(data) {
+  const response = await axios.post(`${API_BASE}/context/apply-context`, data);
+  return response.data;
+}
+
+// Deprecated: prefer context + runPipeline + getResults flow.
+export async function getFinalDecision(data) {
+  const response = await axios.post(`${API_BASE}/decision/final`, data);
+  return response.data;
+}
+
+export async function explainDecision(data) {
+  const response = await axios.post(`${API_BASE}/decision/explain-final`, data);
+  return response.data;
+}
