@@ -59,9 +59,8 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
     weighted_output = train_with_weights(X_train, y_train, np.ones(len(y_train)))
     all_probs = weighted_output.get("probabilities", [])
 
-    # ---------------- STEP 2: GLOBAL RATE ---------------- #
-    base_preds = []
     prob_list = []
+    base_preds = []
 
     for p in all_probs:
         probs = _ensure_two_class_probs(p)
@@ -70,9 +69,9 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
         prob_list.append(p1)
         base_preds.append(1 if p1 >= 0.5 else 0)
 
-    global_rate = sum(base_preds) / max(len(base_preds), 1)
+    global_rate = np.mean(base_preds)
 
-    # ---------------- STEP 3: GROUP RATES ---------------- #
+    # ---------------- STEP 2: GROUP RATES ---------------- #
     group_rates = {}
     bias_col = bias_columns[0] if bias_columns else None
 
@@ -81,14 +80,16 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
         df_temp["_pred"] = base_preds
 
         for group, gdf in df_temp.groupby(bias_col):
-            rate = gdf["_pred"].mean()
-            group_rates[group] = rate
+            group_rates[group] = gdf["_pred"].mean()
 
     print("[M6] Group rates:", group_rates)
 
-    # ---------------- STEP 4: ADAPTIVE THRESHOLDS ---------------- #
+    # ---------------- STEP 3: PROBABILITY ADJUSTMENT ---------------- #
     debiased_predictions = []
     debiased_probs = []
+
+    # 🔥 stronger scaling based on bias
+    strength = min(0.6, bias_gap * 1.2)
 
     for i, p1 in enumerate(prob_list):
 
@@ -96,25 +97,33 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
             group = df.iloc[i][bias_col]
             group_rate = group_rates.get(group, global_rate)
 
-            # 🔥 ADAPTIVE SHIFT
+            # normalize delta (avoid explosion)
             delta = global_rate - group_rate
 
-            # stronger adjustment if bias is large
-            threshold = 0.5 - (delta * 0.5)
+            # 🔥 controlled adjustment
+            # 🔥 stronger correction using ratio-based scaling
+            if abs(global_rate - group_rate) > 1e-6:
+                correction = (global_rate / (group_rate + 1e-6)) - 1
+            else:
+                correction = 0
 
-            # clamp threshold
-            threshold = max(0.3, min(0.7, threshold))
+            adjustment = strength * correction * 0.2
+
+            p1_new = p1 + adjustment
         else:
-            threshold = 0.5
+            p1_new = p1
 
-        pred = 1 if p1 >= threshold else 0
+        # 🛡 clamp to avoid extreme collapse
+        p1_new = max(0.05, min(0.95, p1_new))
+
+        pred = 1 if p1_new >= 0.5 else 0
 
         debiased_predictions.append(pred)
-        debiased_probs.append(p1)
+        debiased_probs.append(p1_new)
 
-    print("[M6] Sample preds:", debiased_predictions[:10])
+    print("[M6] Sample debiased probs:", debiased_probs[:10])
 
-    # ---------------- STEP 5: FAIRNESS AFTER ---------------- #
+    # ---------------- STEP 4: FAIRNESS AFTER ---------------- #
     try:
         after_metrics = compute_fairness_metrics(
             df=df,
@@ -127,7 +136,7 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
         print("[M6 ERROR]:", e)
         after_bias = bias_gap
 
-    # ---------------- STEP 6: IMPROVEMENT ---------------- #
+    # ---------------- STEP 5: IMPROVEMENT ---------------- #
     improvement = max(0.0, bias_gap - after_bias)
     changed = improvement > 0.01
 
@@ -140,7 +149,7 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
     # ---------------- FINAL ---------------- #
     return {
         "status": "applied",
-        "reason": "adaptive debiasing applied",
+        "reason": "enhanced probability-based debiasing applied",
 
         "reweighted_results": {
             "predictions": debiased_predictions,

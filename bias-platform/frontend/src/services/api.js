@@ -48,7 +48,7 @@ export async function runPipeline() {
   return res.data;
 }
 
-// ---------------- RESULTS (🔥 FIXED) ---------------- //
+// ---------------- RESULTS (🔥 FINAL FIX) ---------------- //
 
 export async function getResults() {
   const res = await api.get("/results");
@@ -88,35 +88,8 @@ export async function getResults() {
       alerts: data?.monitoring?.alerts || [],
       driftExplanation: data?.monitoring?.driftExplanation || "",
 
-      // 🔥 IMPORTANT
-      debiasing_effect:
-        data?.module6?.debiasing_effect ||
-        data?.monitoring?.debiasing_effect ||
-        {},
+      // 🔥 THIS IS THE KEY FIX
+      debiasing_effect: data?.module6?.debiasing_effect || {},
     },
   };
-}
-
-// ---------------- CONTEXT ---------------- //
-
-export async function setContext(data) {
-  const res = await api.post("/context", data);
-  return res.data;
-}
-
-// Deprecated endpoints
-
-export async function applyContext(data) {
-  const res = await api.post("/context/apply-context", data);
-  return res.data;
-}
-
-export async function getFinalDecision(data) {
-  const res = await api.post("/decision/final", data);
-  return res.data;
-}
-
-export async function explainDecision(data) {
-  const res = await api.post("/decision/explain-final", data);
-  return res.data;
 }

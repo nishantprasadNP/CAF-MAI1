@@ -19,11 +19,7 @@ function ResultsDashboard({ results }) {
         {/* ✅ FAIRNESS */}
         <FairnessPanel
           data={results.fairness}
-          debias={
-            results.monitoring?.debiasing_effect ||
-            results.debiasing_effect ||
-            {}
-          }
+          debias={results.monitoring?.debiasing_effect || {}}
         />
 
         {/* ✅ DECISION */}

@@ -5,7 +5,6 @@ import pandas as pd
 import math
 
 from app.modules.module0.data_contract import DataContract
-from app.modules.module2.service import suggest_bias_columns
 from app.modules.module4.service import run_module4
 from app.modules.module5.service import run_module5
 from app.modules.module6.service import run_module6
@@ -83,14 +82,12 @@ class BiasPipeline:
             log("M4", "Training + Inference")
 
             module4 = run_module4(self.dataset) or {}
-
             runtime = module4.get("_runtime", {})
             pipeline = runtime.get("pipeline")
 
             if pipeline is None:
                 raise ValueError("Model pipeline not found in Module 4")
 
-            # 🔥 FULL DATA (IMPORTANT FIX)
             df_full = pd.DataFrame(self.dataset["X"]).reset_index(drop=True)
             y_full = pd.Series(self.dataset["Y"]).reset_index(drop=True)
 
@@ -99,47 +96,21 @@ class BiasPipeline:
                 if col not in df_full.columns and col in self.raw_df.columns:
                     df_full[col] = self.raw_df[col].values
 
-            # 🔥 FULL PREDICTIONS (CRITICAL FIX)
-            full_preds = pipeline.predict(df_full)
-            y_pred_full = pd.Series(full_preds).reset_index(drop=True)
+            # predictions (baseline)
+            y_pred_full = pd.Series(pipeline.predict(df_full)).reset_index(drop=True)
 
-            print("\n[M4 DEBUG]")
-            print("Unique predictions:", set(full_preds))
-            print("Sample preds:", full_preds[:10])
+            # ================= MODULE 5 (BEFORE) ================= #
+            log("M5", "Fairness (before debiasing)")
 
-            # ================= DEBUG ================= #
-            print("\n========== DATA DEBUG ==========")
-            print("Columns:", df_full.columns.tolist())
-            print("Bias Columns:", self.bias_columns)
-
-            if self.bias_columns:
-                col = self.bias_columns[0]
-                if col in df_full.columns:
-                    print("\nGroup distribution:")
-                    print(df_full[col].value_counts())
-
-                    print("\nGroup-wise predictions:")
-                    for g in df_full[col].unique():
-                        idx = df_full[df_full[col] == g].index
-                        preds_group = y_pred_full.iloc[idx]
-                        print(f"{g}:")
-                        print("  preds:", preds_group.tolist())
-                        print("  positive_rate:", (preds_group == 1).mean())
-
-            print("========== END DEBUG ==========\n")
-
-            # ================= MODULE 5 ================= #
-            log("M5", "Fairness computation")
-
-            module5 = run_module5(
+            module5_before = run_module5(
                 df=df_full,
                 y_true=y_full,
                 y_pred=y_pred_full,
                 bias_columns=self.bias_columns,
             ) or {}
 
-            print("\n[M5 DEBUG]")
-            print(module5)
+            print("\n[M5 BEFORE DEBUG]")
+            print(module5_before)
 
             # ================= MODULE 6 ================= #
             log("M6", "Debiasing")
@@ -149,22 +120,50 @@ class BiasPipeline:
                 X_train=pd.DataFrame(self.dataset["X"]),
                 y_train=pd.Series(self.dataset["Y"]),
                 bias_columns=self.bias_columns,
-                module5_results=module5,
+                module5_results=module5_before,
             ) or {}
 
             print("\n[M6 DEBUG]")
             print(module6)
 
+            # ================= APPLY DEBIASING ================= #
+            debias_preds = module6.get("reweighted_results", {}).get("predictions")
+            debias_probs = module6.get("reweighted_results", {}).get("probabilities")
+
+            if debias_preds:
+                y_pred_used = pd.Series(debias_preds, index=df_full.index)
+                print("\n[PIPELINE] Using DEBIASED predictions")
+            else:
+                y_pred_used = y_pred_full
+                print("\n[PIPELINE] Using ORIGINAL predictions")
+
+            # ================= MODULE 5 (AFTER) ================= #
+            log("M5", "Fairness (after debiasing)")
+
+            module5_after = run_module5(
+                df=df_full,
+                y_true=y_full,
+                y_pred=y_pred_used,
+                bias_columns=self.bias_columns,
+            ) or {}
+
+            print("\n[M5 AFTER DEBUG]")
+            print(module5_after)
+
             # ================= MODULE 8 ================= #
             log("M8", "Decision")
 
-            probs = pipeline.predict_proba(df_full)[0]
-            base_probs = _normalize_probs(probs)
+            if debias_probs:
+                p1 = float(debias_probs[0])
+                probs_used = [1 - p1, p1]
+            else:
+                probs = pipeline.predict_proba(df_full)[0]
+                probs_used = _normalize_probs(probs)
 
             decision = run_module8(
-                probabilities=base_probs,
-                original_probabilities=base_probs,
-                fairness_output=module5,
+                probabilities=probs_used,
+                original_probabilities=probs_used,
+                fairness_output=module5_after,
                 top_features={},
             ) or {}
 
@@ -184,7 +183,7 @@ class BiasPipeline:
 
             monitoring = run_monitoring(
                 df=df_full,
-                fairness_output=module5,
+                fairness_output=module5_after,
                 decision_output=decision,
                 bias_columns=self.bias_columns,
             )
@@ -197,7 +196,8 @@ class BiasPipeline:
                 "decision": decision,
                 "validation": validation,
                 "monitoring": monitoring,
-                "fairness": module5,
+                "fairness": module5_after,
+                "module6": module6,
             })
 
             log("END", "Pipeline complete")
