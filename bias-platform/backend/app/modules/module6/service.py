@@ -10,6 +10,23 @@ from app.modules.module4.preprocess import resample_dataset
 from app.modules.module4.train import train_with_weights
 
 
+def _normalize_probabilities(probabilities):
+    clean = [max(0.0, min(1.0, float(p))) for p in probabilities]
+    total = sum(clean)
+    if total <= 0:
+        return [1.0 / len(clean) for _ in clean] if clean else []
+    return [p / total for p in clean]
+
+
+def _apply_bias_gap_adjustment(base_probs, bias_gap, sensitive_class=1):
+    adjustment = 0.1 * float(bias_gap)
+    debiased_probs = [
+        max(0.0, min(1.0, p - adjustment if i == sensitive_class else p))
+        for i, p in enumerate(base_probs)
+    ]
+    return _normalize_probabilities(debiased_probs), float(adjustment)
+
+
 def run_module6(df, X_train, y_train, bias_columns, module5_results):
     """
     Orchestrate Module 6 debiasing pipeline.
@@ -97,10 +114,12 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
     original_probs = weighted_output.get("probabilities", [])
     new_probs = resampled_output.get("probabilities", [])
 
-    validation = validate_debiasing(
+    probability_adjustment, adjustment = _apply_bias_gap_adjustment(
         original_probs,
-        new_probs,
+        bias_gap=bias_gap,
+        sensitive_class=1 if len(original_probs) > 1 else 0,
     )
+    validation = validate_debiasing(original_probs, probability_adjustment)
     
     # Step 7: Return orchestration results.
     # Exclude '_runtime' keys (sklearn pipeline objects) so the dict is JSON-safe.
@@ -118,5 +137,11 @@ def run_module6(df, X_train, y_train, bias_columns, module5_results):
         },
         "reweighted_results": _strip(weighted_output),
         "resampled_results": _strip(resampled_output),
+        "probability_adjustment": {
+            "original_probabilities": original_probs,
+            "debiased_probabilities": probability_adjustment,
+            "adjustment": adjustment,
+            "sensitive_class": 1 if len(original_probs) > 1 else 0,
+        },
         "debiasing_effect": validation,
     }

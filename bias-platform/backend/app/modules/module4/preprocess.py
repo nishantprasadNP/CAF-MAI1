@@ -2,6 +2,7 @@ from typing import Any
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -19,7 +20,10 @@ def build_preprocessor(x_df: pd.DataFrame) -> tuple[ColumnTransformer, list[str]
     )
     categorical_pipeline = Pipeline(
         steps=[
-            ("imputer", SimpleImputer(strategy="most_frequent")),
+            # Force categorical columns to a uniform string dtype so sklearn
+            # encoders never receive mixed float/str values.
+            ("to_string", FunctionTransformer(lambda data: pd.DataFrame(data).astype(str), validate=False)),
+            ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
             ("encoder", OneHotEncoder(handle_unknown="ignore")),
         ]
     )

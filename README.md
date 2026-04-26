@@ -4,6 +4,72 @@ Bias Platform is a FastAPI + React decision intelligence platform with an integr
 
 ---
 
+## Latest Updates (Apr 2026)
+
+This project is now a **Context-Aware Bias Amplification Detection & Explainable AI System**.
+
+- **CBAS added (Module 7):** `cbas = context_bias - base_bias`
+- **Fairness expansion (Module 5):** equalized odds, predictive parity, group-wise confusion matrix
+- **Debiasing effect fix (Module 6):** probability adjustment now applies deterministic bias-gap reduction
+- **Decision explainability extension (Module 8):** `top_features`, `contextContribution`, `biasContribution`
+- **Compliance rule engine (Module 10):** `status` + `violations` with risk/context checks
+- **Monitoring drift update (Module 11):** absolute bias drift + thresholded alerts
+- **Gemini augmentation:** LLM explanations added for context/decision/compliance/drift with safe fallback
+
+### New/Updated Result Fields
+
+- `context.cbas`, `context.impact`, `context.reason`, `context.confidence`
+- `decision.top_features`, `decision.contextContribution`, `decision.biasContribution`
+- `decision.decisionExplanation`, `decision.featureExplanation`
+- `compliance.status`, `compliance.violations`, `compliance.aiComplianceNote`
+- `monitoring.bias_drift`, `monitoring.alerts`, `monitoring.driftExplanation`
+
+### Gemini + Environment Setup
+
+1. Set API key in:
+   - `bias-platform/backend/.env`
+2. Use:
+   - `GEMINI_API_KEY=your_actual_api_key_here`
+3. Install dependencies:
+   - `python-dotenv`
+   - `google-generativeai`
+
+Gemini is **non-blocking**: if API/config fails, backend returns fallback text (`"Explanation unavailable"`) and pipeline continues.
+
+### Local Run (Important)
+
+Run backend from the backend directory so `app.main:app` imports correctly.
+
+**Windows (PowerShell):**
+
+```powershell
+cd C:\CAF-MAI1\bias-platform\backend
+python -m uvicorn app.main:app --reload
+```
+
+**Frontend (PowerShell):**
+
+```powershell
+cd C:\CAF-MAI1\bias-platform\frontend
+npm install
+npm run dev
+```
+
+**Linux/macOS:**
+
+```bash
+./run-backend.sh
+./run-frontend.sh
+```
+
+### Quick Validation
+
+- Backend health: `GET http://localhost:8000/health`
+- Frontend: `http://localhost:5173`
+- Module checks script: `python test_modules.py`
+
+---
+
 ## Pipeline Flow
 
 The orchestrated execution order is unchanged:

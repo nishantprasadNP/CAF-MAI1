@@ -39,12 +39,15 @@ function ResultsDashboard({ results, contextApplied }) {
 
           <p>
             <strong>Impact:</strong>{" "}
-            {typeof results.context?.base_probability?.[1] === "number" &&
-            typeof results.context?.final_probability?.[1] === "number"
-              ? (
-                  results.context.final_probability[1] -
-                  results.context.base_probability[1]
-                ).toFixed(2)
+            {typeof results.context?.impact === "number"
+              ? results.context.impact.toFixed(2)
+              : "N/A"}
+          </p>
+
+          <p>
+            <strong>Bias Amplification (CBAS):</strong>{" "}
+            {typeof results.context?.cbas === "number"
+              ? results.context.cbas.toFixed(2)
               : "N/A"}
           </p>
 
@@ -79,6 +82,20 @@ function ResultsDashboard({ results, contextApplied }) {
 
         {/* ✅ EXPLAINABILITY */}
         <ExplainabilityPanel explainability={results.decision} />
+
+        <div className="result-card wide">
+          <h3>AI Explanation (Gemini)</h3>
+          <p>{results.context?.reason || "Explanation unavailable"}</p>
+
+          <h4>Decision Explanation</h4>
+          <p>{results.decision?.decisionExplanation || "Explanation unavailable"}</p>
+
+          <h4>Feature Insights</h4>
+          <p>{results.decision?.featureExplanation || "Explanation unavailable"}</p>
+
+          <h4>Compliance Insight</h4>
+          <p>{results.compliance?.aiComplianceNote || "Explanation unavailable"}</p>
+        </div>
       </div>
     </section>
   );

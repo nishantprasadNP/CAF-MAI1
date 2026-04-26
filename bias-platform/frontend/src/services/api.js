@@ -64,6 +64,10 @@ export async function getResults() {
       context_influence: data?.decision?.context_influence || "unknown",
       explanation: data?.decision?.explanation || "",
       top_features: data?.decision?.top_features || [],
+      contextContribution: data?.decision?.contextContribution ?? 0,
+      biasContribution: data?.decision?.biasContribution ?? 0,
+      decisionExplanation: data?.decision?.decisionExplanation || "",
+      featureExplanation: data?.decision?.featureExplanation || "",
     },
 
     // -------- FAIRNESS -------- //
@@ -82,6 +86,8 @@ export async function getResults() {
       values: data?.context?.values || {},
       base_probability: data?.context?.base_probability || [],
       final_probability: data?.context?.final_probability || [],
+      impact: data?.context?.impact ?? 0,
+      cbas: data?.context?.cbas ?? 0,
       confidence: data?.context?.confidence || "unknown",
       reason: data?.context?.reason || "",
     },
@@ -104,6 +110,7 @@ export async function getResults() {
       pii_removed: data?.compliance?.pii_removed ?? false,
       violations: data?.compliance?.violations || [],
       role: data?.compliance?.role || "",
+      aiComplianceNote: data?.compliance?.aiComplianceNote || "",
     },
 
     // -------- MONITORING -------- //
@@ -112,6 +119,7 @@ export async function getResults() {
       bias_drift: data?.monitoring?.bias_drift ?? 0,
       trend: data?.monitoring?.trend || "stable",
       alerts: data?.monitoring?.alerts || [],
+      driftExplanation: data?.monitoring?.driftExplanation || "",
     },
   };
 }
