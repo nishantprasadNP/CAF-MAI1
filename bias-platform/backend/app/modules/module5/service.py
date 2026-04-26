@@ -6,20 +6,63 @@ from app.modules.module5.fairness import compute_fairness_metrics
 from app.modules.module5.intersectional import compute_intersectional_metrics
 from app.modules.module5.subgroup import compute_subgroup_metrics
 
+try:
+    from app.utils.gemini_client import generate_text
+    GEMINI_AVAILABLE = True
+except Exception:
+    GEMINI_AVAILABLE = False
+
+
+def _safe_float(x):
+    try:
+        val = float(x)
+        if math.isnan(val) or math.isinf(val):
+            return 0.0
+        return val
+    except Exception:
+        return 0.0
+
+
+def _interpret_bias(bias_gap: float) -> dict:
+    if bias_gap < 0.05:
+        return {"bias_level": "low", "message": "Model is fairly balanced"}
+    elif bias_gap < 0.15:
+        return {"bias_level": "moderate", "message": "Some disparity detected across groups"}
+    else:
+        return {"bias_level": "high", "message": "Significant bias detected across subgroups"}
+
+
+def _generate_ai_insight(summary, bias_gaps):
+    if not GEMINI_AVAILABLE:
+        return None
+
+    try:
+        prompt = f"""
+        Analyze fairness of a model:
+
+        Bias Gap: {summary.get("bias_gap")}
+        Demographic Parity: {summary.get("demographic_parity")}
+        Equal Opportunity: {summary.get("equal_opportunity")}
+
+        Give a short 2-line explanation of fairness issues.
+        """
+
+        return generate_text(prompt)
+    except Exception:
+        return None
+
+
+# ---------------- MAIN ---------------- #
 
 def run_module5(df, y_true, y_pred, bias_columns):
 
     # ---------------- GLOBAL METRICS ---------------- #
     try:
-        accuracy = accuracy_score(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred, zero_division=0)
-        if math.isnan(accuracy):
-            accuracy = 0.0
-        if math.isnan(f1):
-            f1 = 0.0
+        accuracy = _safe_float(accuracy_score(y_true, y_pred))
+        f1 = _safe_float(f1_score(y_true, y_pred, zero_division=0))
     except Exception:
-        accuracy = None
-        f1 = None
+        accuracy = 0.0
+        f1 = 0.0
 
     # ---------------- SUBGROUP ---------------- #
     subgroup_metrics = compute_subgroup_metrics(
@@ -65,25 +108,23 @@ def run_module5(df, y_true, y_pred, bias_columns):
                 continue
 
             column_groups = column_payload.get("groups", {})
-            if not isinstance(column_groups, dict):
-                continue
-
             for group, metric_values in column_groups.items():
+
                 dp = metric_values.get("demographic_parity")
                 eo = metric_values.get("equal_opportunity")
 
                 if isinstance(dp, (int, float)):
                     dp_values.append(dp)
-                    summary["groups"][str(group)] = round(dp, 6)
+                    summary["groups"][str(group)] = round(dp, 4)
 
                 if isinstance(eo, (int, float)):
                     eo_values.append(eo)
 
     if dp_values:
-        summary["demographic_parity"] = round(sum(dp_values) / len(dp_values), 6)
+        summary["demographic_parity"] = round(sum(dp_values) / len(dp_values), 4)
 
     if eo_values:
-        summary["equal_opportunity"] = round(sum(eo_values) / len(eo_values), 6)
+        summary["equal_opportunity"] = round(sum(eo_values) / len(eo_values), 4)
 
     gap_values = [
         val
@@ -93,7 +134,15 @@ def run_module5(df, y_true, y_pred, bias_columns):
     ]
 
     if gap_values:
-        summary["bias_gap"] = round(max(gap_values), 6)
+        summary["bias_gap"] = round(max(gap_values), 4)
+
+    # ---------------- INTERPRETATION ---------------- #
+    insight = _interpret_bias(summary["bias_gap"])
+
+    # ---------------- GEMINI (OPTIONAL) ---------------- #
+    ai_explanation = _generate_ai_insight(summary, bias_gaps)
+
+    insight["ai_explanation"] = ai_explanation
 
     return {
         "accuracy": accuracy,
@@ -104,4 +153,5 @@ def run_module5(df, y_true, y_pred, bias_columns):
         "intersectional": intersectional,
         "fairness_metrics": fairness_metrics,
         "summary": summary,
+        "insight": insight,
     }

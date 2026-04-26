@@ -1,147 +1,164 @@
 import numpy as np
 import pandas as pd
 
-from app.modules.module5.fairness import (
-    compute_sample_weights,
-    compute_fairness_metrics,
-    validate_debiasing,
-)
+from app.modules.module5.fairness import compute_fairness_metrics
 from app.modules.module4.preprocess import resample_dataset
 from app.modules.module4.train import train_with_weights
 
 
-def _normalize_probabilities(probabilities):
-    clean = [max(0.0, min(1.0, float(p))) for p in probabilities]
-    total = sum(clean)
+# ---------------- UTILS ---------------- #
+
+def _normalize_probs(probs):
+    try:
+        probs = [float(p) for p in probs]
+    except Exception:
+        return [0.5, 0.5]
+
+    total = sum(probs)
     if total <= 0:
-        return [1.0 / len(clean) for _ in clean] if clean else []
-    return [p / total for p in clean]
+        return [0.5, 0.5]
+
+    return [p / total for p in probs]
 
 
-def _apply_bias_gap_adjustment(base_probs, bias_gap, sensitive_class=1):
-    adjustment = 0.1 * float(bias_gap)
-    debiased_probs = [
-        max(0.0, min(1.0, p - adjustment if i == sensitive_class else p))
-        for i, p in enumerate(base_probs)
-    ]
-    return _normalize_probabilities(debiased_probs), float(adjustment)
+def _ensure_two_class_probs(p):
+    if isinstance(p, (list, tuple)) and len(p) >= 2:
+        return _normalize_probs(p)
 
+    try:
+        p1 = float(p)
+        return [1 - p1, p1]
+    except Exception:
+        return [0.5, 0.5]
+
+
+# ---------------- MAIN ---------------- #
 
 def run_module6(df, X_train, y_train, bias_columns, module5_results):
-    """
-    Orchestrate Module 6 debiasing pipeline.
-    
-    This function coordinates the debiasing workflow by:
-    1. Computing fairness-aware sample weights
-    2. Training a weighted model
-    3. Resampling the dataset
-    4. Training on resampled data
-    5. Comparing fairness metrics before and after
-    
-    Args:
-        df: DataFrame with bias columns
-        X_train: Training features
-        y_train: Training labels
-        bias_columns: List of bias column names
-        module5_results: Results from Module 5 (before debiasing)
-        
-    Returns:
-        Dictionary containing:
-            - weights_summary: Statistics of computed weights
-            - reweighted_results: Results from weighted model training
-            - resampled_results: Results from resampled model training
-            - debiasing_effect: Validation comparing before and after metrics
-    """
-    fairness_summary = module5_results.get("summary", {}) if isinstance(module5_results, dict) else {}
-    bias_gap = fairness_summary.get("bias_gap", 0.0) if isinstance(fairness_summary, dict) else 0.0
-    if not isinstance(bias_gap, (int, float)):
-        bias_gap = 0.0
 
-    # Step 0: Skip debiasing when fairness gap is already small.
-    if float(bias_gap) < 0.05:
+    print("\n[MODULE 6 START]")
+
+    summary = module5_results.get("summary", {})
+    bias_gap = float(summary.get("bias_gap", 0.0))
+
+    print("Bias Gap:", bias_gap)
+
+    if bias_gap < 0.03:
         return {
             "status": "skipped",
-            "reason": "dataset already balanced",
-            "threshold": 0.05,
-            "weights_summary": {
-                "min": 1.0,
-                "max": 1.0,
-                "mean": 1.0,
-            },
-            "reweighted_results": {
-                "predictions": [],
-                "probabilities": [],
-            },
-            "resampled_results": {
-                "predictions": [],
-                "probabilities": [],
-            },
+            "reason": "low bias gap",
             "debiasing_effect": {
-                "bias_reduction": {},
-                "fairness_improvement": {},
+                "before": round(bias_gap, 4),
+                "after": round(bias_gap, 4),
+                "improvement": 0.0,
+                "changed": False,
             },
         }
 
-    # Step 1: Compute fairness-aware sample weights
-    weights = compute_sample_weights(df, y_train, bias_columns)
-    
-    # Step 2: Train weighted model
-    weighted_output = train_with_weights(X_train, y_train, weights)
-    
-    # Step 3: Resample dataset
+    # ---------------- STEP 1: TRAIN ---------------- #
+    weighted_output = train_with_weights(X_train, y_train, np.ones(len(y_train)))
+    all_probs = weighted_output.get("probabilities", [])
+
+    # ---------------- STEP 2: GLOBAL RATE ---------------- #
+    base_preds = []
+    prob_list = []
+
+    for p in all_probs:
+        probs = _ensure_two_class_probs(p)
+        p1 = probs[1]
+
+        prob_list.append(p1)
+        base_preds.append(1 if p1 >= 0.5 else 0)
+
+    global_rate = sum(base_preds) / max(len(base_preds), 1)
+
+    # ---------------- STEP 3: GROUP RATES ---------------- #
+    group_rates = {}
+    bias_col = bias_columns[0] if bias_columns else None
+
+    if bias_col and bias_col in df.columns:
+        df_temp = df.copy()
+        df_temp["_pred"] = base_preds
+
+        for group, gdf in df_temp.groupby(bias_col):
+            rate = gdf["_pred"].mean()
+            group_rates[group] = rate
+
+    print("[M6] Group rates:", group_rates)
+
+    # ---------------- STEP 4: ADAPTIVE THRESHOLDS ---------------- #
+    debiased_predictions = []
+    debiased_probs = []
+
+    for i, p1 in enumerate(prob_list):
+
+        if bias_col and bias_col in df.columns:
+            group = df.iloc[i][bias_col]
+            group_rate = group_rates.get(group, global_rate)
+
+            # 🔥 ADAPTIVE SHIFT
+            delta = global_rate - group_rate
+
+            # stronger adjustment if bias is large
+            threshold = 0.5 - (delta * 0.5)
+
+            # clamp threshold
+            threshold = max(0.3, min(0.7, threshold))
+        else:
+            threshold = 0.5
+
+        pred = 1 if p1 >= threshold else 0
+
+        debiased_predictions.append(pred)
+        debiased_probs.append(p1)
+
+    print("[M6] Sample preds:", debiased_predictions[:10])
+
+    # ---------------- STEP 5: FAIRNESS AFTER ---------------- #
+    try:
+        after_metrics = compute_fairness_metrics(
+            df=df,
+            y_true=y_train,
+            y_pred=pd.Series(debiased_predictions, index=df.index),
+            bias_columns=bias_columns,
+        )
+        after_bias = float(after_metrics.get("summary", {}).get("bias_gap", bias_gap))
+    except Exception as e:
+        print("[M6 ERROR]:", e)
+        after_bias = bias_gap
+
+    # ---------------- STEP 6: IMPROVEMENT ---------------- #
+    improvement = max(0.0, bias_gap - after_bias)
+    changed = improvement > 0.01
+
+    print("[M6] Before:", bias_gap, "After:", after_bias)
+
+    # ---------------- OPTIONAL RESAMPLING ---------------- #
     X_res, y_res = resample_dataset(X_train, y_train)
-    
-    # Step 4: Train model on resampled data (uniform weights)
-    resampled_output = train_with_weights(
-        X_res, y_res, np.ones(len(y_res))
-    )
-    
-    # Step 5: Recompute fairness metrics using new predictions.
-    # After the train.py fix, predictions are a plain list at the top level.
-    new_fairness_metrics = compute_fairness_metrics(
-        df=df,
-        y_true=y_train,
-        y_pred=pd.Series(weighted_output["predictions"], index=df.index),
-        bias_columns=bias_columns,
-    )
-    
-    # Step 6: Compare before and after debiasing
-    # Extract fairness_metrics from module5_results if available
-    before_metrics = {}
-    if isinstance(module5_results, dict):
-        before_metrics = module5_results.get("fairness_metrics", {})
-    
-    original_probs = weighted_output.get("probabilities", [])
-    new_probs = resampled_output.get("probabilities", [])
+    resampled_output = train_with_weights(X_res, y_res, np.ones(len(y_res)))
 
-    probability_adjustment, adjustment = _apply_bias_gap_adjustment(
-        original_probs,
-        bias_gap=bias_gap,
-        sensitive_class=1 if len(original_probs) > 1 else 0,
-    )
-    validation = validate_debiasing(original_probs, probability_adjustment)
-    
-    # Step 7: Return orchestration results.
-    # Exclude '_runtime' keys (sklearn pipeline objects) so the dict is JSON-safe.
-    def _strip(d):
-        return {k: v for k, v in d.items() if k != "_runtime"}
-
+    # ---------------- FINAL ---------------- #
     return {
         "status": "applied",
-        "reason": "debiasing applied due to fairness gap threshold",
-        "threshold": 0.05,
-        "weights_summary": {
-            "min": float(weights.min()),
-            "max": float(weights.max()),
-            "mean": float(weights.mean()),  
+        "reason": "adaptive debiasing applied",
+
+        "reweighted_results": {
+            "predictions": debiased_predictions,
+            "probabilities": debiased_probs,
         },
-        "reweighted_results": _strip(weighted_output),
-        "resampled_results": _strip(resampled_output),
-        "probability_adjustment": {
-            "original_probabilities": original_probs,
-            "debiased_probabilities": probability_adjustment,
-            "adjustment": adjustment,
-            "sensitive_class": 1 if len(original_probs) > 1 else 0,
+
+        "resampled_results": {
+            "predictions": resampled_output.get("predictions", []),
+            "probabilities": [
+                _ensure_two_class_probs(p)[1]
+                for p in resampled_output.get("probabilities", [])
+            ],
         },
-        "debiasing_effect": validation,
+
+        "debiasing_effect": {
+            "before": round(bias_gap, 4),
+            "after": round(after_bias, 4),
+            "improvement": round(improvement, 4),
+            "changed": changed,
+        },
     }
