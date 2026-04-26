@@ -1,4 +1,5 @@
 from typing import Any
+from app.utils.gemini_client import generate_explanation as generate_gemini_explanation
 
 
 def _confidence_bucket(value: float) -> str:
@@ -19,7 +20,7 @@ def make_decision(probabilities: list[float]) -> dict[str, Any]:
     return {"label": label, "confidence": confidence}
 
 
-def generate_explanation(
+def generate_structured_explanation(
     *,
     decision_label: int,
     confidence: float,
@@ -112,13 +113,38 @@ def run_module8(
     bias_score = bias_score_raw / total
 
     # ---------------- EXPLANATION ---------------- #
-    explanation_text = generate_explanation(
+    explanation_text = generate_structured_explanation(
         decision_label=decision["label"],
         confidence=decision["confidence"],
         bias_flag=bias_flag,
         context_influence=context_influence,
         top_feature=top_feature_name,
     )
+
+    feature_prompt = f"""
+Feature importance scores: {top_features}
+
+Explain in plain English which features influenced the decision most and why.
+Avoid technical jargon.
+"""
+    feature_explanation = generate_gemini_explanation(feature_prompt)
+    if feature_explanation == "Explanation unavailable":
+        feature_explanation = explanation_text
+
+    decision_prompt = f"""
+Decision: {"approve" if decision["label"] == 1 else "reject"}
+Confidence: {decision["confidence"]}
+Bias Score: {max_gap}
+Context Impact: {context_delta}
+
+Explain why this decision was made, including:
+- main contributing factors
+- role of bias
+- role of context
+"""
+    decision_explanation = generate_gemini_explanation(decision_prompt)
+    if decision_explanation == "Explanation unavailable":
+        decision_explanation = explanation_text
 
     explanation_structured = {
         "summary": explanation_text,
@@ -139,6 +165,8 @@ def run_module8(
         "explanation": explanation_text,
         "explanation_structured": explanation_structured,
         "top_features": top_features_breakdown,
+        "featureExplanation": feature_explanation,
+        "decisionExplanation": decision_explanation,
         "contextContribution": round(abs(context_delta), 6),
         "biasContribution": round(float(max_gap), 6),
         "context_delta": round(float(context_delta), 6),

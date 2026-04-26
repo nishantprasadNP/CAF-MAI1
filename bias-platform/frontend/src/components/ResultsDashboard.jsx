@@ -82,6 +82,20 @@ function ResultsDashboard({ results, contextApplied }) {
 
         {/* ✅ EXPLAINABILITY */}
         <ExplainabilityPanel explainability={results.decision} />
+
+        <div className="result-card wide">
+          <h3>AI Explanation (Gemini)</h3>
+          <p>{results.context?.reason || "Explanation unavailable"}</p>
+
+          <h4>Decision Explanation</h4>
+          <p>{results.decision?.decisionExplanation || "Explanation unavailable"}</p>
+
+          <h4>Feature Insights</h4>
+          <p>{results.decision?.featureExplanation || "Explanation unavailable"}</p>
+
+          <h4>Compliance Insight</h4>
+          <p>{results.compliance?.aiComplianceNote || "Explanation unavailable"}</p>
+        </div>
       </div>
     </section>
   );

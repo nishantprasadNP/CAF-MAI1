@@ -1,5 +1,6 @@
 from app.modules.module7.encoder import encode_context
 from app.modules.module7.injector import apply_context
+from app.utils.gemini_client import generate_explanation
 
 
 def _classify_bias_impact(bias_score: float) -> str:
@@ -65,7 +66,17 @@ def compute_context_impact(
     else:
         confidence = "low"
 
-    reason = f"{dominant_feature} increased prediction by {round(context_delta, 2)}"
+    fallback_reason = f"{dominant_feature} increased prediction by {round(context_delta, 2)}"
+    context_dict = context_service.get_context() or {}
+    prompt = f"""
+Model prediction changed from {base_bias} to {context_bias}.
+Context: {context_dict}
+
+Explain WHY this change happened in simple, human-readable terms.
+Focus on cause-effect reasoning.
+"""
+    explanation = generate_explanation(prompt)
+    reason = explanation if explanation != "Explanation unavailable" else fallback_reason
 
     return {
         "base_probability": base_probs,

@@ -3,6 +3,7 @@ import math
 from typing import Any
 
 import pandas as pd
+from app.utils.gemini_client import generate_explanation
 
 _BIAS_HISTORY: list[float] = []
 
@@ -67,10 +68,20 @@ def run_monitoring(
     if not alerts:
         alerts = ["No anomalies detected"]
 
+    drift_prompt = f"""
+Bias drift detected: {bias_drift}
+
+Explain what this means and potential risks.
+"""
+    drift_explanation = generate_explanation(drift_prompt)
+    if drift_explanation == "Explanation unavailable":
+        drift_explanation = "Bias drift indicates how much fairness disparity changed since the last run."
+
     return {
         "data_drift": float(data_drift),
         "previous_bias_drift": previous_bias,
         "current_bias_drift": float(current_bias),
         "bias_drift": float(bias_drift),
         "alerts": alerts,
+        "driftExplanation": drift_explanation,
     }
