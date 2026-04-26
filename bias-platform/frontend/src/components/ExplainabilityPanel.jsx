@@ -1,3 +1,10 @@
+function formatFeature(name) {
+  if (!name) return "";
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function ExplainabilityPanel({ explainability }) {
   const features = explainability?.top_features || [];
 
@@ -5,10 +12,7 @@ function ExplainabilityPanel({ explainability }) {
     <div className="result-card wide">
       <h3>Explainability</h3>
 
-      <p>
-        <strong>Context Contribution:</strong>{" "}
-        {explainability?.contextContribution ?? "N/A"}
-      </p>
+      {}
 
       <p>
         <strong>Bias Contribution:</strong>{" "}
@@ -21,8 +25,12 @@ function ExplainabilityPanel({ explainability }) {
         {features.length ? (
           features.map((item, i) => (
             <li key={i}>
-              <span>{item.feature || item.name}</span>
-              <strong>{item.impact || item.score}</strong>
+              <span>{formatFeature(item.feature)}</span>
+              <strong>
+                {typeof item.impact === "number"
+                  ? item.impact.toFixed(3)
+                  : item.score ?? "N/A"}
+              </strong>
             </li>
           ))
         ) : (

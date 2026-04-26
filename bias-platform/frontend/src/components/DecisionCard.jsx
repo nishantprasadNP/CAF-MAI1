@@ -5,6 +5,19 @@ function riskClass(value) {
   return "risk-safe";
 }
 
+// 🔥 Feature name cleaner
+function formatFeature(name) {
+  if (!name) return "";
+
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace("Pclass", "Passenger Class")
+    .replace("Sex", "Gender")
+    .replace("Fare", "Ticket Fare")
+    .replace("Cabin", "Cabin Info");
+}
+
 function DecisionCard({ decision }) {
   if (!decision) return null;
 
@@ -14,13 +27,12 @@ function DecisionCard({ decision }) {
       : "N/A";
 
   const biasRisk = decision?.bias_flag || "unknown";
-  const contextInfluence = decision?.context_influence || "unknown";
 
+  // ✅ Use AI explanation only (no duplication)
   const explanation =
-    decision?.explanation || "No explanation available";
-
-  const aiExplanation =
-    decision?.ai_explanation || null;
+    decision?.ai_explanation ||
+    decision?.explanation ||
+    "No explanation available";
 
   const features = Array.isArray(decision?.top_features)
     ? decision.top_features
@@ -42,32 +54,21 @@ function DecisionCard({ decision }) {
         <strong>Bias Risk:</strong> {biasRisk}
       </p>
 
-      <p className={riskClass(contextInfluence)}>
-        <strong>Context Influence:</strong> {contextInfluence}
-      </p>
+      {/* ❌ REMOVED context_influence */}
 
       <details className="decision-why">
         <summary>Why this decision?</summary>
 
-        {/* Primary explanation */}
-        <p>{explanation}</p>
+        <p style={{ lineHeight: "1.6" }}>{explanation}</p>
 
-        {/* 🔥 AI Explanation (Gemini) */}
-        {aiExplanation && (
-          <p style={{ marginTop: "8px", color: "#4b5563" }}>
-            {aiExplanation}
-          </p>
-        )}
-
-        {/* Top features */}
         {features.length > 0 && (
           <ul className="feature-list">
             {features.map((item, i) => (
               <li key={i}>
-                <span>{item.feature || item.name || "unknown"}</span>
+                <span>{formatFeature(item.feature)}</span>
                 <strong>
                   {typeof item.impact === "number"
-                    ? item.impact
+                    ? item.impact.toFixed(3)
                     : item.score ?? "N/A"}
                 </strong>
               </li>

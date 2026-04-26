@@ -48,7 +48,7 @@ export async function runPipeline() {
   return res.data;
 }
 
-// ---------------- RESULTS (🔥 FINAL FIX) ---------------- //
+// ---------------- RESULTS ---------------- //
 
 export async function getResults() {
   const res = await api.get("/results");
@@ -59,10 +59,9 @@ export async function getResults() {
       decision: data?.decision?.decision || "UNKNOWN",
       confidence: data?.decision?.confidence || 0,
       bias_flag: data?.decision?.bias_flag || "unknown",
-      context_influence: data?.decision?.context_influence || "unknown",
+
       explanation: data?.decision?.explanation || "",
       top_features: data?.decision?.top_features || [],
-      contextContribution: data?.decision?.contextContribution ?? 0,
       biasContribution: data?.decision?.biasContribution ?? 0,
       ai_explanation: data?.decision?.ai_explanation || "",
     },
@@ -77,8 +76,6 @@ export async function getResults() {
 
     validation: data?.validation || {},
 
-    compliance: data?.compliance || {},
-
     monitoring: {
       data_drift: data?.monitoring?.data_drift ?? 0,
       bias_drift: data?.monitoring?.bias_drift ?? 0,
@@ -88,7 +85,6 @@ export async function getResults() {
       alerts: data?.monitoring?.alerts || [],
       driftExplanation: data?.monitoring?.driftExplanation || "",
 
-      // 🔥 THIS IS THE KEY FIX
       debiasing_effect: data?.module6?.debiasing_effect || {},
     },
   };

@@ -3,6 +3,7 @@ from typing import Any
 import traceback
 import pandas as pd
 import math
+import numpy as np
 
 from app.modules.module0.data_contract import DataContract
 from app.modules.module4.service import run_module4
@@ -42,6 +43,27 @@ def _normalize_probs(probs):
     return [p / total for p in safe] if total > 0 else [0.5, 0.5]
 
 
+# ---------------- FEATURE NAME EXTRACTION ---------------- #
+
+def _get_feature_names(pipeline, X_df):
+    """
+    Handles:
+    - Raw models
+    - ColumnTransformer pipelines
+    """
+    try:
+        if hasattr(pipeline, "named_steps"):
+            for step in pipeline.named_steps.values():
+                if hasattr(step, "get_feature_names_out"):
+                    return list(step.get_feature_names_out())
+
+        # fallback → original columns
+        return list(X_df.columns)
+
+    except Exception:
+        return list(X_df.columns)
+
+
 # ---------------- PIPELINE ---------------- #
 
 class BiasPipeline:
@@ -72,7 +94,7 @@ class BiasPipeline:
         self.dataset["B_user"] = bias_columns
         return {"B_user": bias_columns}
 
-    # ---------------- MAIN PIPELINE ---------------- #
+    # ---------------- MAIN ---------------- #
 
     def run_pipeline(self):
         try:
@@ -86,7 +108,7 @@ class BiasPipeline:
             pipeline = runtime.get("pipeline")
 
             if pipeline is None:
-                raise ValueError("Model pipeline not found in Module 4")
+                raise ValueError("Model pipeline not found")
 
             df_full = pd.DataFrame(self.dataset["X"]).reset_index(drop=True)
             y_full = pd.Series(self.dataset["Y"]).reset_index(drop=True)
@@ -96,11 +118,10 @@ class BiasPipeline:
                 if col not in df_full.columns and col in self.raw_df.columns:
                     df_full[col] = self.raw_df[col].values
 
-            # predictions (baseline)
             y_pred_full = pd.Series(pipeline.predict(df_full)).reset_index(drop=True)
 
             # ================= MODULE 5 (BEFORE) ================= #
-            log("M5", "Fairness (before debiasing)")
+            log("M5", "Fairness (before)")
 
             module5_before = run_module5(
                 df=df_full,
@@ -108,9 +129,6 @@ class BiasPipeline:
                 y_pred=y_pred_full,
                 bias_columns=self.bias_columns,
             ) or {}
-
-            print("\n[M5 BEFORE DEBUG]")
-            print(module5_before)
 
             # ================= MODULE 6 ================= #
             log("M6", "Debiasing")
@@ -123,22 +141,19 @@ class BiasPipeline:
                 module5_results=module5_before,
             ) or {}
 
-            print("\n[M6 DEBUG]")
-            print(module6)
-
-            # ================= APPLY DEBIASING ================= #
+            # ================= APPLY DEBIAS ================= #
             debias_preds = module6.get("reweighted_results", {}).get("predictions")
             debias_probs = module6.get("reweighted_results", {}).get("probabilities")
 
             if debias_preds:
                 y_pred_used = pd.Series(debias_preds, index=df_full.index)
-                print("\n[PIPELINE] Using DEBIASED predictions")
+                print("[PIPELINE] Using DEBIASED predictions")
             else:
                 y_pred_used = y_pred_full
-                print("\n[PIPELINE] Using ORIGINAL predictions")
+                print("[PIPELINE] Using ORIGINAL predictions")
 
             # ================= MODULE 5 (AFTER) ================= #
-            log("M5", "Fairness (after debiasing)")
+            log("M5", "Fairness (after)")
 
             module5_after = run_module5(
                 df=df_full,
@@ -147,8 +162,75 @@ class BiasPipeline:
                 bias_columns=self.bias_columns,
             ) or {}
 
-            print("\n[M5 AFTER DEBUG]")
-            print(module5_after)
+            # ================= FIX DEBIAS EFFECT ================= #
+            before_bias = module5_before.get("summary", {}).get("bias_gap", 0.0)
+            after_bias = module5_after.get("summary", {}).get("bias_gap", 0.0)
+
+            module6["debiasing_effect"] = {
+                "before": round(before_bias, 4),
+                "after": round(after_bias, 4),
+                "improvement": round(max(0.0, before_bias - after_bias), 4),
+                "changed": abs(before_bias - after_bias) > 0.01,
+            }
+
+            # ================= ROBUST FEATURE EXTRACTION ================= #
+
+            top_features = {}
+
+            try:
+                # 1️⃣ Get final model
+                if hasattr(pipeline, "named_steps"):
+                    model = list(pipeline.named_steps.values())[-1]
+                else:
+                    model = pipeline
+
+                # 2️⃣ Get feature names properly
+                feature_names = []
+
+                for step in pipeline.named_steps.values():
+                    if hasattr(step, "get_feature_names_out"):
+                        try:
+                            feature_names = list(step.get_feature_names_out())
+                            break
+                        except Exception:
+                            pass
+
+                # fallback → original columns
+                if not feature_names:
+                    feature_names = list(df_full.columns)
+
+                # 3️⃣ Extract importance
+                raw_importance = None
+
+                if hasattr(model, "coef_"):
+                    raw_importance = model.coef_[0]
+
+                elif hasattr(model, "feature_importances_"):
+                    raw_importance = model.feature_importances_
+
+                # 4️⃣ Map safely
+                if raw_importance is not None and len(raw_importance) > 0:
+                    size = min(len(raw_importance), len(feature_names))
+
+                    mapped = {
+                        feature_names[i]: float(raw_importance[i])
+                        for i in range(size)
+                    }
+
+                    # take top 5
+                    sorted_feats = sorted(
+                        mapped.items(),
+                        key=lambda x: abs(x[1]),
+                        reverse=True
+                    )[:5]
+
+                    top_features = dict(sorted_feats)
+
+                print("\n[PIPELINE] Extracted top features:")
+                print(top_features)
+
+            except Exception as e:
+                print("[PIPELINE FEATURE ERROR]", e)
 
             # ================= MODULE 8 ================= #
             log("M8", "Decision")
@@ -164,19 +246,13 @@ class BiasPipeline:
                 probabilities=probs_used,
                 original_probabilities=probs_used,
                 fairness_output=module5_after,
-                top_features={},
+                top_features=top_features,
             ) or {}
-
-            print("\n[M8 DEBUG]")
-            print(decision)
 
             # ================= MODULE 9 ================= #
             log("M9", "Validation")
 
             validation = validate_decision(decision, 10)
-
-            print("\n[M9 DEBUG]")
-            print(validation)
 
             # ================= MODULE 11 ================= #
             log("M11", "Monitoring")
@@ -187,9 +263,6 @@ class BiasPipeline:
                 decision_output=decision,
                 bias_columns=self.bias_columns,
             )
-
-            print("\n[M11 DEBUG]")
-            print(monitoring)
 
             # ================= FINAL ================= #
             self.results = _deep_strip_runtime({

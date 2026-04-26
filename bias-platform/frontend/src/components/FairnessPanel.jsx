@@ -53,7 +53,9 @@ function FairnessPanel({ data, debias }) {
 
         <p>
           <strong>Improvement:</strong>{" "}
-          {typeof improvement === "number"
+          {debias?.changed === false
+            ? "Not required (already fair)"
+            : typeof improvement === "number"
             ? improvement.toFixed(2)
             : "No significant change detected"}
         </p>
