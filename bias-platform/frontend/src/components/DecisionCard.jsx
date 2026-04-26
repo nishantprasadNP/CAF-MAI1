@@ -5,7 +5,39 @@ function riskClass(value) {
   return "risk-safe";
 }
 
+// 🔥 Feature name cleaner
+function formatFeature(name) {
+  if (!name) return "";
+
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace("Pclass", "Passenger Class")
+    .replace("Sex", "Gender")
+    .replace("Fare", "Ticket Fare")
+    .replace("Cabin", "Cabin Info");
+}
+
 function DecisionCard({ decision }) {
+  if (!decision) return null;
+
+  const confidence =
+    typeof decision?.confidence === "number"
+      ? (decision.confidence * 100).toFixed(1) + "%"
+      : "N/A";
+
+  const biasRisk = decision?.bias_flag || "unknown";
+
+  // ✅ Use AI explanation only (no duplication)
+  const explanation =
+    decision?.ai_explanation ||
+    decision?.explanation ||
+    "No explanation available";
+
+  const features = Array.isArray(decision?.top_features)
+    ? decision.top_features
+    : [];
+
   return (
     <div className="result-card decision-card">
       <h3>Decision</h3>
@@ -15,35 +47,34 @@ function DecisionCard({ decision }) {
       </p>
 
       <p>
-        <strong>Confidence:</strong>{" "}
-        {typeof decision?.confidence === "number"
-          ? (decision.confidence * 100).toFixed(1) + "%"
-          : "N/A"}
+        <strong>Confidence:</strong> {confidence}
       </p>
 
-      <p className={riskClass(decision?.bias_flag)}>
-        <strong>Bias Risk:</strong> {decision?.bias_flag || "Unknown"}
+      <p className={riskClass(biasRisk)}>
+        <strong>Bias Risk:</strong> {biasRisk}
       </p>
 
-      <p className={riskClass(decision?.context_influence)}>
-        <strong>Context Influence:</strong>{" "}
-        {decision?.context_influence || "Unknown"}
-      </p>
+      {/* ❌ REMOVED context_influence */}
 
       <details className="decision-why">
         <summary>Why this decision?</summary>
-        <p>{decision?.explanation || "No explanation available"}</p>
 
-        {decision?.top_features?.length ? (
+        <p style={{ lineHeight: "1.6" }}>{explanation}</p>
+
+        {features.length > 0 && (
           <ul className="feature-list">
-            {decision.top_features.map((item, i) => (
+            {features.map((item, i) => (
               <li key={i}>
-                <span>{item.feature || item.name}</span>
-                <strong>{item.impact || item.score}</strong>
+                <span>{formatFeature(item.feature)}</span>
+                <strong>
+                  {typeof item.impact === "number"
+                    ? item.impact.toFixed(3)
+                    : item.score ?? "N/A"}
+                </strong>
               </li>
             ))}
           </ul>
-        ) : null}
+        )}
       </details>
     </div>
   );

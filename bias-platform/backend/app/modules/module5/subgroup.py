@@ -1,41 +1,35 @@
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+import pandas as pd
 
 
 def compute_subgroup_metrics(df, y_true, y_pred, bias_columns):
     if not bias_columns:
         return {}
 
-    labels = sorted(set(y_true.dropna().tolist()) | set(y_pred.dropna().tolist()))
-    positive_label = 1 if 1 in labels else (labels[-1] if labels else 1)
+    df = df.reset_index(drop=True)
+    y_pred = pd.Series(y_pred).reset_index(drop=True)
 
-    subgroup_metrics = {}
+    results = {}
 
-    for column in bias_columns:
-        if column not in df.columns:
+    for col in bias_columns:
+        if col not in df.columns:
             continue
 
-        column_metrics = {}
-        grouped = df.groupby(column)
+        grouped = df.groupby(col)
+        col_metrics = {}
 
-        for subgroup_value, subgroup_df in grouped:
-            idx = subgroup_df.index
-            if len(idx) == 0:
-                continue
+        for val, g in grouped:
+            idx = g.index
 
-            y_true_group = y_true.loc[idx]
-            y_pred_group = y_pred.loc[idx]
+            preds = y_pred.iloc[idx]
 
-            if len(y_true_group) == 0:
-                continue
+            # 🔥 CRITICAL: positive prediction rate
+            positive_rate = (preds == 1).mean()
 
-            column_metrics[str(subgroup_value)] = {
-                "accuracy": accuracy_score(y_true_group, y_pred_group),
-                "precision": precision_score(y_true_group, y_pred_group, pos_label=positive_label, zero_division=0),
-                "recall": recall_score(y_true_group, y_pred_group, pos_label=positive_label, zero_division=0),
-                "f1": f1_score(y_true_group, y_pred_group, pos_label=positive_label, zero_division=0),
+            col_metrics[str(val)] = {
+                "positive_rate": float(positive_rate),
+                "count": int(len(preds)),
             }
 
-        if column_metrics:
-            subgroup_metrics[column] = column_metrics
+        results[col] = col_metrics
 
-    return subgroup_metrics
+    return results

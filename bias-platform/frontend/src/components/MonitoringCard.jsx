@@ -5,8 +5,8 @@ function classifyDrift(value) {
 }
 
 function MonitoringCard({ monitoring }) {
-  const dataDrift = monitoring?.data_drift ?? 0;
-  const biasDrift = monitoring?.bias_drift ?? 0;
+  const dataDrift = Number(monitoring?.data_drift ?? 0);
+  const biasDrift = Number(monitoring?.bias_drift ?? 0);
 
   return (
     <div className="result-card">

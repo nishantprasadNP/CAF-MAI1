@@ -1,15 +1,17 @@
 function FairnessPanel({ data, debias }) {
-  // 🔥 SAFE EXTRACTION
-  const accuracy = data?.accuracy;
-  const f1 = data?.f1;
-  const biasGap = data?.bias_gap;
-  const fairnessMetrics = data?.fairness_metrics || {};
+  if (!data) return null;
 
-  const fairnessCount = Object.keys(fairnessMetrics).length;
+  const summary = data.summary || {};
 
-  // 🔥 FORMATTERS
-  const formatPercent = (val) =>
-    typeof val === "number" ? `${(val * 100).toFixed(1)}%` : "N/A";
+  const accuracy = data.accuracy ?? 0;
+  const f1 = data.f1 ?? 0;
+
+  const biasGap = summary.bias_gap ?? 0;
+  const fairnessCount = data.num_fairness_metrics ?? 0;
+
+  const before = debias?.before;
+  const after = debias?.after;
+  const improvement = debias?.improvement;
 
   return (
     <div className="result-card wide">
@@ -17,16 +19,18 @@ function FairnessPanel({ data, debias }) {
 
       <div className="summary-grid">
         <p>
-          <strong>Accuracy:</strong> {formatPercent(accuracy)}
+          <strong>Accuracy:</strong> {(accuracy * 100).toFixed(1)}%
         </p>
 
         <p>
-          <strong>F1:</strong> {formatPercent(f1)}
+          <strong>F1:</strong> {(f1 * 100).toFixed(1)}%
         </p>
 
         <p>
           <strong>Bias Gap:</strong>{" "}
-          {typeof biasGap === "number" ? biasGap.toFixed(2) : "N/A"}
+          <span style={{ color: biasGap > 0.2 ? "red" : "green" }}>
+            {biasGap.toFixed(2)}
+          </span>
         </p>
 
         <p>
@@ -39,17 +43,21 @@ function FairnessPanel({ data, debias }) {
       <div className="summary-grid">
         <p>
           <strong>Before Fairness:</strong>{" "}
-          {debias?.before || "No significant change detected"}
+          {typeof before === "number" ? before.toFixed(2) : "No data"}
         </p>
 
         <p>
           <strong>After Fairness:</strong>{" "}
-          {debias?.after || "No significant change detected"}
+          {typeof after === "number" ? after.toFixed(2) : "No data"}
         </p>
 
         <p>
           <strong>Improvement:</strong>{" "}
-          {debias?.improvement || "No significant change detected"}
+          {debias?.changed === false
+            ? "Not required (already fair)"
+            : typeof improvement === "number"
+            ? improvement.toFixed(2)
+            : "No significant change detected"}
         </p>
       </div>
     </div>

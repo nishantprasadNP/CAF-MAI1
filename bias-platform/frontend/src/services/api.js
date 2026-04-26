@@ -48,102 +48,44 @@ export async function runPipeline() {
   return res.data;
 }
 
-// ---------------- RESULTS (🔥 MOST IMPORTANT FIX) ---------------- //
+// ---------------- RESULTS ---------------- //
 
 export async function getResults() {
   const res = await api.get("/results");
   const data = res.data || {};
 
-  // 🔥 NORMALIZATION LAYER (CRITICAL)
   return {
-    // -------- DECISION -------- //
     decision: {
       decision: data?.decision?.decision || "UNKNOWN",
       confidence: data?.decision?.confidence || 0,
       bias_flag: data?.decision?.bias_flag || "unknown",
-      context_influence: data?.decision?.context_influence || "unknown",
+
       explanation: data?.decision?.explanation || "",
       top_features: data?.decision?.top_features || [],
-      contextContribution: data?.decision?.contextContribution ?? 0,
       biasContribution: data?.decision?.biasContribution ?? 0,
-      decisionExplanation: data?.decision?.decisionExplanation || "",
-      featureExplanation: data?.decision?.featureExplanation || "",
+      ai_explanation: data?.decision?.ai_explanation || "",
     },
 
-    // -------- FAIRNESS -------- //
     fairness: {
-      accuracy: data?.fairness?.accuracy ?? null,
-      f1: data?.fairness?.f1 ?? null,
-      bias_gap: data?.fairness?.bias_gap ?? 0,
-      fairness_metrics:
-        data?.fairness?.fairness_metrics ||
-        data?.fairness?.metrics ||
-        {},
+      accuracy: data?.fairness?.accuracy ?? 0,
+      f1: data?.fairness?.f1 ?? 0,
+      num_fairness_metrics:
+        data?.fairness?.num_fairness_metrics ?? 0,
+      summary: data?.fairness?.summary || {},
     },
 
-    // -------- CONTEXT -------- //
-    context: {
-      values: data?.context?.values || {},
-      base_probability: data?.context?.base_probability || [],
-      final_probability: data?.context?.final_probability || [],
-      impact: data?.context?.impact ?? 0,
-      cbas: data?.context?.cbas ?? 0,
-      confidence: data?.context?.confidence || "unknown",
-      reason: data?.context?.reason || "",
-    },
+    validation: data?.validation || {},
 
-    // -------- VALIDATION -------- //
-    validation: {
-      status: data?.validation?.status || "unknown",
-      action: data?.validation?.action || "none",
-      reason: data?.validation?.reason || "",
-      alternative: data?.validation?.alternative || "",
-      required_resources:
-        data?.validation?.required_resources ?? null,
-      available_resources:
-        data?.validation?.available_resources ?? null,
-    },
-
-    // -------- COMPLIANCE -------- //
-    compliance: {
-      status: data?.compliance?.status || "unknown",
-      pii_removed: data?.compliance?.pii_removed ?? false,
-      violations: data?.compliance?.violations || [],
-      role: data?.compliance?.role || "",
-      aiComplianceNote: data?.compliance?.aiComplianceNote || "",
-    },
-
-    // -------- MONITORING -------- //
     monitoring: {
       data_drift: data?.monitoring?.data_drift ?? 0,
       bias_drift: data?.monitoring?.bias_drift ?? 0,
+      previous_bias: data?.monitoring?.previous_bias ?? 0,
+      current_bias: data?.monitoring?.current_bias ?? 0,
       trend: data?.monitoring?.trend || "stable",
       alerts: data?.monitoring?.alerts || [],
       driftExplanation: data?.monitoring?.driftExplanation || "",
+
+      debiasing_effect: data?.module6?.debiasing_effect || {},
     },
   };
-}
-
-// ---------------- CONTEXT ---------------- //
-
-export async function setContext(data) {
-  const res = await api.post("/context", data);
-  return res.data;
-}
-
-// Deprecated endpoints (kept for compatibility)
-
-export async function applyContext(data) {
-  const res = await api.post("/context/apply-context", data);
-  return res.data;
-}
-
-export async function getFinalDecision(data) {
-  const res = await api.post("/decision/final", data);
-  return res.data;
-}
-
-export async function explainDecision(data) {
-  const res = await api.post("/decision/explain-final", data);
-  return res.data;
 }

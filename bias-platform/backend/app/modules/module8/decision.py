@@ -2,57 +2,25 @@ from typing import Any
 from app.utils.gemini_client import generate_explanation as generate_gemini_explanation
 
 
-def _confidence_bucket(value: float) -> str:
-    if value < 0.05:
-        return "low"
-    if value < 0.15:
-        return "medium"
-    return "high"
-
+# ---------------- DECISION ---------------- #
 
 def make_decision(probabilities: list[float]) -> dict[str, Any]:
     if not probabilities:
-        return {"label": -1, "confidence": 0.0}
+        return {"label": -1, "confidence": 0.5}
 
     label = int(max(range(len(probabilities)), key=lambda i: probabilities[i]))
     confidence = float(probabilities[label])
 
-    return {"label": label, "confidence": confidence}
+    # normalize confidence
+    if confidence < 0.5:
+        confidence = 1 - confidence
+
+    return {"label": label, "confidence": round(confidence, 3)}
 
 
-def generate_structured_explanation(
-    *,
-    decision_label: int,
-    confidence: float,
-    bias_flag: str,
-    context_influence: str,
-    top_feature: str,
-) -> str:
-    return (
-        f"Model predicts {'APPROVE' if decision_label == 1 else 'REJECT'} "
-        f"with confidence {confidence:.2f}. "
-        f"Decision is primarily influenced by {top_feature}, "
-        f"with {bias_flag} bias risk and {context_influence} context influence."
-    )
+# ---------------- BIAS FLAG ---------------- #
 
-
-def run_module8(
-    *,
-    probabilities: list[float],
-    original_probabilities: list[float],
-    fairness_output: dict[str, Any],
-    top_features: dict[str, float] | None = None,
-) -> dict[str, Any]:
-
-    # ---------------- SAFETY ---------------- #
-    probabilities = probabilities or [0.5, 0.5]
-    original_probabilities = original_probabilities or probabilities
-    top_features = top_features or {}
-
-    # ---------------- DECISION ---------------- #
-    decision = make_decision(probabilities)
-
-    # ---------------- BIAS ---------------- #
+def _get_bias_flag(fairness_output: dict) -> tuple[str, float]:
     bias_gaps = fairness_output.get("bias_gaps", {}) if isinstance(fairness_output, dict) else {}
 
     max_gap = 0.0
@@ -63,114 +31,129 @@ def run_module8(
                     max_gap = max(max_gap, float(val))
 
     if max_gap > 0.2:
-        bias_flag = "high"
+        return "high", max_gap
     elif max_gap > 0.08:
-        bias_flag = "moderate"
-    else:
-        bias_flag = "low"
+        return "moderate", max_gap
+    return "low", max_gap
 
-    # ---------------- CONTEXT SHIFT ---------------- #
-    if len(probabilities) == len(original_probabilities):
-        shift = sum(abs(a - b) for a, b in zip(probabilities, original_probabilities)) / len(probabilities)
-        context_delta = probabilities[1] - original_probabilities[1] if len(probabilities) > 1 else 0.0
-    else:
-        shift = 0.0
-        context_delta = 0.0
 
-    context_influence = _confidence_bucket(shift)
+# ---------------- FEATURE EXTRACTION ---------------- #
 
-    # ---------------- FEATURE IMPORTANCE (REAL) ---------------- #
+def _get_top_features(top_features: dict) -> list:
+    """
+    Always return meaningful features.
+    If empty → return empty list (NO FAKE FEATURES)
+    """
+
+    if not top_features:
+        return []  # 🔥 FIX: remove fake fallback
+
     sorted_features = sorted(
         top_features.items(),
         key=lambda x: abs(x[1]),
         reverse=True
     )[:5]
 
-    direction_features = []
-
-    for name, value in sorted_features:
-        signed = value if decision["label"] == 1 else -value
-        direction_features.append({
-            "feature": str(name),
-            "impact": f"{signed:+.3f}",
-        })
-
-    top_feature_name = direction_features[0]["feature"] if direction_features else "key features"
-    top_features_breakdown = [
-        {"feature": str(name), "impact": float(score)}
-        for name, score in sorted(top_features.items(), key=lambda x: -x[1])[:5]
+    return [
+        {"feature": str(name), "impact": round(float(score), 3)}
+        for name, score in sorted_features
     ]
 
+
+# ---------------- HUMAN EXPLANATION ---------------- #
+
+def _build_feature_explanation(top_features_list: list) -> str:
+    if not top_features_list:
+        return "No dominant features identified."
+
+    parts = []
+    for f in top_features_list[:3]:
+        sign = "increased" if f["impact"] > 0 else "decreased"
+        parts.append(f"{f['feature']} ({sign} likelihood by {abs(f['impact']):.2f})")
+
+    return "Key factors: " + ", ".join(parts)
+
+
+# ---------------- MAIN ---------------- #
+
+def run_module8(
+    *,
+    probabilities: list[float],
+    original_probabilities: list[float],
+    fairness_output: dict[str, Any],
+    top_features: dict[str, float] | None = None,
+) -> dict[str, Any]:
+
+    probabilities = probabilities or [0.5, 0.5]
+    original_probabilities = original_probabilities or probabilities
+    top_features = top_features or {}
+
+    # ---------------- DECISION ---------------- #
+    decision = make_decision(probabilities)
+
+    # ---------------- BIAS ---------------- #
+    bias_flag, max_gap = _get_bias_flag(fairness_output)
+
+    # ---------------- FEATURES ---------------- #
+    top_features_list = _get_top_features(top_features)
+
     # ---------------- CONTRIBUTIONS ---------------- #
-    feature_score_raw = sum(abs(v) for _, v in sorted_features)
-    context_score_raw = shift
-    bias_score_raw = max_gap
+    feature_score = sum(abs(f["impact"]) for f in top_features_list)
+    bias_score = max_gap
 
-    total = feature_score_raw + context_score_raw + bias_score_raw + 1e-6
+    total = feature_score + bias_score + 1e-6
 
-    feature_score = feature_score_raw / total
-    context_score = context_score_raw / total
-    bias_score = bias_score_raw / total
+    feature_contribution = feature_score / total
+    bias_contribution = bias_score / total
 
     # ---------------- EXPLANATION ---------------- #
-    explanation_text = generate_structured_explanation(
-        decision_label=decision["label"],
-        confidence=decision["confidence"],
-        bias_flag=bias_flag,
-        context_influence=context_influence,
-        top_feature=top_feature_name,
+
+    feature_expl = _build_feature_explanation(top_features_list)
+
+    summary_text = (
+        f"Decision: {'APPROVE' if decision['label'] == 1 else 'REJECT'} "
+        f"(confidence {decision['confidence']:.2f}). "
+        f"{feature_expl}. "
+        f"Bias risk: {bias_flag}."
     )
 
-    feature_prompt = f"""
-Feature importance scores: {top_features}
+    # ---------------- GEMINI ---------------- #
 
-Explain in plain English which features influenced the decision most and why.
-Avoid technical jargon.
-"""
-    feature_explanation = generate_gemini_explanation(feature_prompt)
-    if feature_explanation == "Explanation unavailable":
-        feature_explanation = explanation_text
+    gemini_prompt = f"""
+    Decision: {"approve" if decision['label'] == 1 else "reject"}
+    Confidence: {decision['confidence']}
+    Bias Gap: {max_gap}
 
-    decision_prompt = f"""
-Decision: {"approve" if decision["label"] == 1 else "reject"}
-Confidence: {decision["confidence"]}
-Bias Score: {max_gap}
-Context Impact: {context_delta}
+    Top Features:
+    {top_features_list}
 
-Explain why this decision was made, including:
-- main contributing factors
-- role of bias
-- role of context
-"""
-    decision_explanation = generate_gemini_explanation(decision_prompt)
-    if decision_explanation == "Explanation unavailable":
-        decision_explanation = explanation_text
+    Explain the decision clearly:
+    - What drove the decision?
+    - How features influenced it
+    - Whether bias is concerning
+    """
 
-    explanation_structured = {
-        "summary": explanation_text,
-        "top_features": direction_features,
-        "contributions": {
-            "feature": round(feature_score, 4),
-            "context": round(context_score, 4),
-            "bias": round(bias_score, 4),
-        },
-    }
+    ai_explanation = generate_gemini_explanation(gemini_prompt)
+
+    if ai_explanation == "Explanation unavailable":
+        ai_explanation = summary_text
+
+    # ---------------- FINAL ---------------- #
 
     return {
         "decision": "approve" if decision["label"] == 1 else "reject",
         "label": decision["label"],
         "confidence": decision["confidence"],
+
         "bias_flag": bias_flag,
-        "context_influence": context_influence,
-        "explanation": explanation_text,
-        "explanation_structured": explanation_structured,
-        "top_features": top_features_breakdown,
-        "featureExplanation": feature_explanation,
-        "decisionExplanation": decision_explanation,
-        "contextContribution": round(abs(context_delta), 6),
-        "biasContribution": round(float(max_gap), 6),
-        "context_delta": round(float(context_delta), 6),
-        "feature_importance": {f["feature"]: f["impact"] for f in direction_features},
+        "biasContribution": round(float(max_gap), 4),
+
+        "top_features": top_features_list,
+        "featureContribution": round(feature_contribution, 4),
+
+        "explanation": summary_text,
+        "ai_explanation": ai_explanation,
+
         "probabilities": probabilities,
         "original_probabilities": original_probabilities,
     }

@@ -1,17 +1,14 @@
 import { useMemo, useState } from "react";
 import ColumnSelector from "./components/ColumnSelector";
-import ContextPanel from "./components/ContextPanel";
 import PipelineRunner from "./components/PipelineRunner";
 import ResultsDashboard from "./components/ResultsDashboard";
 import UploadPanel from "./components/UploadPanel";
-import { getResults, initContract, runPipeline, selectBias, setContext, uploadFile } from "./services/api";
+import { getResults, initContract, runPipeline, selectBias, uploadFile } from "./services/api";
 
 const steps = [
   "Upload Dataset",
   "Select Target + Bias",
   "Run Full Pipeline",
-  "Set Context",
-  "Re-run Final Inference",
   "View Decision Dashboard",
 ];
 
@@ -34,16 +31,8 @@ function App() {
   const [targetColumn, setTargetColumn] = useState("");
   const [selectedBias, setSelectedBias] = useState([]);
   const [results, setResults] = useState(null);
-  const [context, setContextState] = useState(null);
-  const [contextApplied, setContextApplied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [contextInput, setContextInput] = useState({
-    region: "urban",
-    hospital_type: "private",
-    resource_level: "high",
-    time_of_day: "day",
-  });
 
   const selectableColumns = useMemo(() => {
     if (uploadData?.columns?.length) return uploadData.columns;
@@ -110,28 +99,9 @@ function App() {
       await runPipeline();
       const data = await getResults();
       setResults(data);
-      setContextApplied(false);
       setStep(3);
     } catch (err) {
       setError(formatApiError(err, "Pipeline run failed."));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onSetContext = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      await setContext(contextInput);
-      setContextState(contextInput);
-      await runPipeline();
-      const data = await getResults();
-      setResults(data);
-      setContextApplied(true);
-      setStep(5);
-    } catch (err) {
-      setError(formatApiError(err, "Failed to apply context and rerun final inference."));
     } finally {
       setLoading(false);
     }
@@ -152,8 +122,7 @@ function App() {
         <section className="hero">
           <h1>Decision Intelligence Dashboard</h1>
           <p className="lead">
-            Upload data, run full fairness-aware inference, inject context, and inspect decision, validation,
-            compliance, and monitoring outputs in a single workflow.
+            Upload data, run fairness-aware inference, and inspect decision, validation, and monitoring outputs.
           </p>
         </section>
 
@@ -186,17 +155,7 @@ function App() {
 
         {contract && <PipelineRunner loading={loading} hasResults={Boolean(results)} onRunPipeline={onRunPipeline} />}
 
-        {results && (
-          <ContextPanel
-            contextInput={contextInput}
-            contextResult={results.context}
-            loading={loading}
-            onContextChange={(field, value) => setContextInput((prev) => ({ ...prev, [field]: value }))}
-            onApplyContext={onSetContext}
-          />
-        )}
-
-        {results && <ResultsDashboard results={results} contextApplied={contextApplied} />}
+        {results && <ResultsDashboard results={results} />}
 
         {error && <p className="error">{error}</p>}
         {loading && <p className="muted">Working on current step...</p>}
