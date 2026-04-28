@@ -10,7 +10,7 @@ function ColumnSelector({
 
   return (
     <section>
-      <h2>Step 2: Select Target + Bias Columns</h2>
+      <h2>Select Target + Bias Columns</h2>
 
       <div className="inline-row align-top">
         <div className="field-group" style={{ flex: 1 }}>

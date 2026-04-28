@@ -1469,6 +1469,12 @@ select:focus {
   margin-top: 24px;
 }
 
+.charts-grid-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -1484,6 +1490,20 @@ select:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.empty-chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  background: #fcfcfc;
+  border: 1px dashed #eee;
+  border-radius: var(--radius-md);
+  color: var(--medium-gray);
+  font-size: 14px;
+  text-align: center;
+  padding: 20px;
 }
 
 .chart-card.wide {

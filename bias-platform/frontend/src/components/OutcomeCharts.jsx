@@ -1,14 +1,20 @@
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line } from 'recharts';
+import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
 const COLORS = ['#C8F000', '#111111', '#EF4444', '#F59E0B', '#22C55E'];
 
 function ConfusionMatrix({ cm }) {
-  if (!cm || typeof cm !== 'object') return null;
+  if (!cm || typeof cm !== 'object') {
+    return (
+      <div className="empty-chart" style={{ height: 450 }}>
+        <p>Run pipeline to generate matrix</p>
+      </div>
+    );
+  }
 
-  const tp = cm.tp || 0;
-  const fp = cm.fp || 0;
-  const tn = cm.tn || 0;
-  const fn = cm.fn || 0;
+  const tp = cm.tp ?? 0;
+  const fp = cm.fp ?? 0;
+  const tn = cm.tn ?? 0;
+  const fn = cm.fn ?? 0;
   const total = tp + fp + tn + fn;
 
   const getIntensity = (val) => {
@@ -17,8 +23,8 @@ function ConfusionMatrix({ cm }) {
   };
 
   return (
-    <div className="cm-container">
-      <div className="cm-grid">
+    <div className="cm-container" style={{ width: '100%' }}>
+      <div className="cm-grid" style={{ margin: '0 auto', maxWidth: '400px' }}>
         <div className="cm-label-corner">Actual \ Pred</div>
         <div className="cm-label-top">Pos (1)</div>
         <div className="cm-label-top">Neg (0)</div>
@@ -44,114 +50,77 @@ function ConfusionMatrix({ cm }) {
         </div>
       </div>
       <div className="cm-legend">
-        <p className="muted">Heatmap intensity based on sample distribution.</p>
+        <p className="muted">Heatmap intensity reflects sample frequency</p>
       </div>
     </div>
   );
 }
 
-function OutcomeCharts({ fairness, debias }) {
+function OutcomeCharts({ fairness }) {
   if (!fairness) return null;
 
-  const { outcome_distribution, global_confusion_matrix, fairness_metrics } = fairness;
+  const { global_confusion_matrix, fairness_metrics } = fairness;
 
-  // Prepare Pie Chart Data
-  const pieData = outcome_distribution?.predicted ? Object.entries(outcome_distribution.predicted).map(([label, value]) => ({
-    name: label === '1' ? 'Positive' : 'Negative',
-    value: value
-  })) : [];
-
-  // Prepare Bar Chart Data (Fairness Metrics across groups)
+  // 1. Prepare Bar Chart Data
   const barData = [];
-  if (fairness_metrics) {
-    Object.entries(fairness_metrics).forEach(([column, data]) => {
-      if (data.groups) {
-        Object.entries(data.groups).forEach(([group, metrics]) => {
+  if (fairness_metrics && typeof fairness_metrics === 'object') {
+    Object.entries(fairness_metrics).forEach(([column, config]) => {
+      if (config?.groups) {
+        Object.entries(config.groups).forEach(([groupName, metrics]) => {
           barData.push({
-            group: `${column}: ${group}`,
-            DP: parseFloat((metrics.demographic_parity * 100).toFixed(1)),
-            EO: parseFloat((metrics.equal_opportunity * 100).toFixed(1)),
+            group: `${column}: ${groupName}`,
+            DP: Number((metrics.demographic_parity * 100).toFixed(1)),
+            EO: Number((metrics.equal_opportunity * 100).toFixed(1)),
           });
         });
       }
     });
   }
 
-  // Prepare Debiasing Trend Data
-  const trendData = [
-    { name: 'Before', value: debias?.before || 0 },
-    { name: 'After', value: debias?.after || 0 },
-  ];
-
   return (
     <div className="outcome-charts-wrapper">
-      <div className="charts-grid">
-        {/* Outcome Distribution Pie */}
-        <div className="chart-card">
-          <h4>Predicted Distribution</h4>
-          <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="muted text-center">Class balance of model predictions</p>
-        </div>
-
-        {/* Debiasing Trend Line Chart */}
-        <div className="chart-card">
-          <h4>Debiasing Disparity Trend</h4>
-          <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer>
-              <LineChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis label={{ value: 'Bias Gap', angle: -90, position: 'insideLeft' }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="value" stroke="#C8F000" strokeWidth={4} dot={{ r: 8, fill: '#C8F000' }} activeDot={{ r: 10 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="muted text-center">Reduction in bias gap after mitigation</p>
-        </div>
-
+      <div className="charts-grid-side-by-side">
         {/* Fairness Metrics Bar Chart */}
-        <div className="chart-card wide">
-          <h4>Subgroup Performance Distribution</h4>
-          <div style={{ width: '100%', height: 350 }}>
-            <ResponsiveContainer>
-              <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="group" angle={-45} textAnchor="end" interval={0} height={100} />
-                <YAxis unit="%" />
-                <Tooltip />
-                <Legend verticalAlign="top" height={36}/>
-                <Bar dataKey="DP" name="Demographic Parity" fill="#C8F000" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="EO" name="Equal Opportunity" fill="#111111" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="chart-card">
+          <h4>Fairness Metrics by Subgroup</h4>
+          {barData.length > 0 ? (
+            <div style={{ width: '100%', height: 600 }}>
+              <ResponsiveContainer>
+                <BarChart 
+                  data={barData} 
+                  layout="vertical"
+                  margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0f0" />
+                  <XAxis type="number" unit="%" domain={[0, 100]} axisLine={false} tickLine={false} />
+                  <YAxis 
+                    dataKey="group" 
+                    type="category" 
+                    width={150}
+                    axisLine={false} 
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: '#666' }}
+                  />
+                  <Tooltip cursor={{fill: 'rgba(0,0,0,0.02)'}} />
+                  <Legend verticalAlign="top" height={36}/>
+                  <Bar dataKey="DP" name="Demographic Parity" fill="#C8F000" radius={[0, 4, 4, 0]} barSize={20} />
+                  <Bar dataKey="EO" name="Equal Opportunity" fill="#111111" radius={[0, 4, 4, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="empty-chart" style={{ height: 450 }}>
+              <p>Select a Sensitive Attribute in Step 2 to see subgroup analysis</p>
+            </div>
+          )}
         </div>
 
         {/* Confusion Matrix */}
         <div className="chart-card">
-          <h4>Confusion Matrix (Heatmap)</h4>
-          <ConfusionMatrix cm={global_confusion_matrix} />
+          <h4>Performance Heatmap</h4>
+          <div style={{ height: 450, display: 'flex', alignItems: 'center', width: '100%' }}>
+            <ConfusionMatrix cm={global_confusion_matrix} />
+          </div>
         </div>
       </div>
     </div>

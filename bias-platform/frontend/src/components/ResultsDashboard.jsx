@@ -33,7 +33,7 @@ function ResultsDashboard({ results }) {
 
   return (
     <section id="results">
-      <h2>Step 6: Multi-Layer Results Dashboard</h2>
+      <h2>Multi-Layer Results Dashboard</h2>
       <p className="muted">
         Decision intelligence view across fairness, validation, and monitoring layers.
       </p>

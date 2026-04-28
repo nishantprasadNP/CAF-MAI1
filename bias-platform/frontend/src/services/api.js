@@ -69,9 +69,11 @@ export async function getResults() {
     fairness: {
       accuracy: data?.fairness?.accuracy ?? 0,
       f1: data?.fairness?.f1 ?? 0,
-      num_fairness_metrics:
-        data?.fairness?.num_fairness_metrics ?? 0,
+      num_fairness_metrics: data?.fairness?.num_fairness_metrics ?? 0,
       summary: data?.fairness?.summary || {},
+      global_confusion_matrix: data?.fairness?.global_confusion_matrix || null,
+      outcome_distribution: data?.fairness?.outcome_distribution || null,
+      fairness_metrics: data?.fairness?.fairness_metrics || null,
     },
 
     validation: data?.validation || {},

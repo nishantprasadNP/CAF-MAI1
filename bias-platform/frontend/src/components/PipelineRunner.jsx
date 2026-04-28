@@ -1,7 +1,7 @@
 function PipelineRunner({ loading, hasResults, onRunPipeline }) {
   return (
     <section>
-      <h2>Step 3: Run Full Pipeline</h2>
+      <h2>Run Full Pipeline</h2>
       <p className="muted">
         This executes data, bias, model, fairness, debiasing, context-aware inference, decision, validation,
         compliance, and monitoring stages.

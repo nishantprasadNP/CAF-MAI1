@@ -1,7 +1,7 @@
 function ComplianceCard({ compliance }) {
   return (
     <div className="result-card">
-      <h3>Compliance (Module 10)</h3>
+      <h3>Compliance</h3>
 
       <p>
         <strong>Role:</strong> {compliance?.role || "N/A"}
