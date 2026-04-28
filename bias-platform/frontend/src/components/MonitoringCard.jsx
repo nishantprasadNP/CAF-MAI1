@@ -10,7 +10,7 @@ function MonitoringCard({ monitoring }) {
 
   return (
     <div className="result-card">
-      <h3>Monitoring (Module 11)</h3>
+      <h3>Monitoring</h3>
 
       <p>
         <strong>Data Drift:</strong> <span className={classifyDrift(dataDrift)}>{dataDrift.toFixed(2)}</span>

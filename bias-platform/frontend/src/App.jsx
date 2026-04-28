@@ -50,6 +50,17 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const resetAll = () => {
+    setStep(0);
+    setFile(null);
+    setUploadData(null);
+    setContract(null);
+    setTargetColumn("");
+    setSelectedBias([]);
+    setResults(null);
+    setError("");
+  };
+
   const selectableColumns = useMemo(() => {
     if (uploadData?.columns?.length) return uploadData.columns;
     if (!contract?.X?.length) return [];
@@ -133,7 +144,7 @@ function App() {
           <a href="#pipeline">Pipeline</a>
           <a href="#results">Results</a>
         </nav>
-        <button className="btn-new-run">New Run</button>
+        <button className="btn-new-run" onClick={resetAll}>New Run</button>
       </header>
 
       <main className="container" id="home">
@@ -205,38 +216,6 @@ function App() {
       </main>
 
       <footer className="footer">
-        <div className="footer-content">
-          <div className="footer-brand">
-            <div className="footer-logo">
-              <svg width="24" height="24" fill="var(--lime)" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.5l7.5 15h-15L12 5.5z" /></svg>
-              <h3>Bias Platform</h3>
-            </div>
-            <p>Enterprise-grade machine learning fairness, validation, and explainability for modern AI systems.</p>
-          </div>
-          <div className="footer-links">
-            <div className="link-column">
-              <h4>Platform</h4>
-              <a href="#features">Features</a>
-              <a href="#integrations">Integrations</a>
-              <a href="#pricing">Pricing</a>
-              <a href="#api">API Documentation</a>
-            </div>
-            <div className="link-column">
-              <h4>Resources</h4>
-              <a href="#guides">Bias Guides</a>
-              <a href="#blog">Blog</a>
-              <a href="#support">Support Center</a>
-              <a href="#status">System Status</a>
-            </div>
-            <div className="link-column">
-              <h4>Company</h4>
-              <a href="#about">About Us</a>
-              <a href="#careers">Careers</a>
-              <a href="#privacy">Privacy Policy</a>
-              <a href="#terms">Terms of Service</a>
-            </div>
-          </div>
-        </div>
         <div className="footer-bottom">
           <p>&copy; {new Date().getFullYear()} Bias Platform Inc. All rights reserved.</p>
           <div className="social-links">

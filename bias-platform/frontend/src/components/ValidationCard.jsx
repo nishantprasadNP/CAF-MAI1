@@ -22,7 +22,7 @@ function ValidationCard({ validation }) {
 
   return (
     <div className="result-card">
-      <h3>Validation (Module 9)</h3>
+      <h3>Validation</h3>
 
       <p>
         <strong>Action:</strong> {action}
