@@ -1,7 +1,7 @@
 function classifyDrift(value) {
-  if (value >= 0.2) return "risk-high";
-  if (value >= 0.1) return "risk-moderate";
-  return "risk-safe";
+  if (value >= 0.2) return "badge error";
+  if (value >= 0.1) return "badge warning";
+  return "badge good";
 }
 
 function MonitoringCard({ monitoring }) {
@@ -12,12 +12,12 @@ function MonitoringCard({ monitoring }) {
     <div className="result-card">
       <h3>Monitoring (Module 11)</h3>
 
-      <p className={classifyDrift(dataDrift)}>
-        <strong>Data Drift:</strong> {dataDrift.toFixed(2)}
+      <p>
+        <strong>Data Drift:</strong> <span className={classifyDrift(dataDrift)}>{dataDrift.toFixed(2)}</span>
       </p>
 
-      <p className={classifyDrift(biasDrift)}>
-        <strong>Bias Drift:</strong> {biasDrift.toFixed(2)}
+      <p>
+        <strong>Bias Drift:</strong> <span className={classifyDrift(biasDrift)}>{biasDrift.toFixed(2)}</span>
       </p>
 
       <p>

@@ -16,36 +16,40 @@ function ColumnSelector({
 
       <div className="field-group">
         <label htmlFor="target-column">Target Column</label>
-        <select id="target-column" value={targetColumn} onChange={(e) => onTargetChange(e.target.value)}>
-          <option value="">Select target column</option>
-          {columns.map((column) => (
-            <option key={column} value={column}>
-              {column}
-            </option>
-          ))}
-        </select>
-        <button onClick={onInitContract} disabled={loading || !targetColumn}>
-          Initialize Contract
-        </button>
+        <div className="inline-row">
+          <select id="target-column" value={targetColumn} onChange={(e) => onTargetChange(e.target.value)}>
+            <option value="">Select target column</option>
+            {columns.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+          <button className="btn-secondary" onClick={onInitContract} disabled={loading || !targetColumn}>
+            Initialize Contract
+          </button>
+        </div>
       </div>
 
       <div className="field-group">
         <label htmlFor="bias-columns">Bias Columns</label>
-        <select
-          id="bias-columns"
-          multiple
-          value={selectedBias}
-          onChange={(e) => onBiasChange(Array.from(e.target.selectedOptions).map((option) => option.value))}
-        >
-          {biasOptions.map((column) => (
-            <option key={column} value={column}>
-              {column}
-            </option>
-          ))}
-        </select>
-        <button onClick={onSaveBias} disabled={loading}>
-          Save Bias Selection
-        </button>
+        <div className="inline-row">
+          <select
+            id="bias-columns"
+            value={selectedBias[0] || ""}
+            onChange={(e) => onBiasChange(e.target.value ? [e.target.value] : [])}
+          >
+            <option value="">Select bias column</option>
+            {biasOptions.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+          <button className="btn-primary" onClick={onSaveBias} disabled={loading}>
+            Save Bias Selection
+          </button>
+        </div>
       </div>
     </section>
   );

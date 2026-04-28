@@ -12,6 +12,14 @@ function ValidationCard({ validation }) {
   const formatValue = (val) =>
     typeof val === "number" ? val : "N/A";
 
+  // Determine badge class based on status
+  const getStatusBadge = (status) => {
+    const s = status.toLowerCase();
+    if (s.includes("not") || s.includes("fail")) return "badge error";
+    if (s.includes("pending") || s.includes("partial")) return "badge warning";
+    return "badge good";
+  };
+
   return (
     <div className="result-card">
       <h3>Validation (Module 9)</h3>
@@ -20,14 +28,8 @@ function ValidationCard({ validation }) {
         <strong>Action:</strong> {action}
       </p>
 
-      <p
-        className={
-          status.toLowerCase().includes("not")
-            ? "risk-high"
-            : "risk-safe"
-        }
-      >
-        <strong>Status:</strong> {status}
+      <p>
+        <strong>Status:</strong> <span className={getStatusBadge(status)}>{status}</span>
       </p>
 
       <p>
