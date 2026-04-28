@@ -1,227 +1,249 @@
-﻿# 🌍 Bias Platform (CAF-MAI1)
+# Bias Platform (CAF-MAI1)
 
-![FastAPI](https://img.shields.io/badge/FastAPI-005585?style=flat&logo=fastapi)
-![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react)
-![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python)
-![License](https://img.shields.io/badge/License-MIT-green)
+A full-stack bias analysis platform with a FastAPI backend and React frontend.  
+It lets you upload tabular data, choose target and bias-sensitive attributes, run an end-to-end fairness pipeline, and review decision, fairness, debiasing, validation, and monitoring outputs.
 
-A **Context-Aware Bias Amplification Detection & Explainable AI System** for responsible ML decision-making.
+## Project Layout
 
----
-
-## 🌍 Problem Statement
-
-Automated decision systems often perpetuate societal biases, leading to unfair outcomes for protected groups. Organizations need bias detection, fairness quantification, debiasing, contextual reasoning, and explainable decisions. Existing solutions lack end-to-end integration of these capabilities in a single pipeline.
-
----
-
-## 💡 Solution Overview
-
-Bias Platform is a **full-stack decision intelligence system** orchestrating an 11-module ML pipeline from data ingestion to monitoring. The system provides calibrated probabilities, bias-aware explanations, and Gemini-powered AI insights with safe fallback mechanisms.
-
----
-
-## 🎯 Features
-
-- 📊 **End-to-End Pipeline**: Modules 0-11 orchestrated execution
-- ⚖️ **Fairness Metrics**: Demographic parity, equal opportunity, bias gaps
-- 🔧 **Debiasing**: Reweighting and resampling strategies
-- 🧠 **Context Engine**: Operational context weighting (region, hospital_type, resource_level, time_of_day)
-- 📝 **Explainability**: Feature importance, context/bias contribution splits
-- 🤖 **AI Insights**: Gemini-powered explanations with fallback
-- ✅ **Compliance**: Privacy checks, role-based access, policy enforcement
-- 📈 **Monitoring**: Data/bias drift detection with alerts
-- 🔄 **Calibrated Probabilities**: Sigmoid calibration for reliable confidence
-- 💻 **Web UI**: React dashboard for upload, configuration, and results
-
----
-
-## 🏗️ Architecture
-
-```
-┌──────────────────┐     ┌─────────────────────────────────────────┐
-│  Frontend        │     │           BACKEND (FastAPI)            │
-│  (React + Vite)  │────▶│  /health /upload /init_contract        │
-└──────────────────┘     │  /select_bias /run_pipeline /results   │
-                          └────────────┬────────────────────────────┘
-                                       │
-      M0→M1→M2→M4→M5→M6→M7→M8→M9→M10→M11
-      Data Prof Bias Model Fair Debi Ctx Dec Val Com Mon
-                          │
-         ┌────────────────┴────────────────┐
-         │    Pipeline Controller           │
-         │  (model, fairness, debiasing,    │
-         │   context, decision, validation)│
-         └──────────────────────────────────┘
-```
-
-### Data Flow
-
-1. **Upload** → CSV file parsed into DataFrame
-2. **Contract** → Target column validated, features/labels separated
-3. **Bias Selection** → User specifies protected attributes
-4. **Pipeline Run** → Modules execute sequentially
-5. **Results** → Unified JSON response with all module outputs
-6. **Context** → Optional context injection for adjusted inference
-7. **Decision** → Final decision with explanations
-
----
-
-## 🛠️ Tech Stack
-
-| Category | Technologies |
-|----------|--------------|
-| Frontend | React 19, Vite 4, Axios |
-| Backend | FastAPI, Uvicorn, Pydantic |
-| AI/ML | Scikit-learn, XGBoost, Pandas, NumPy |
-| AI | Google Generative AI (Gemini) |
-
----
-
-## 📂 Project Structure
-
-```
+```text
 CAF-MAI1/
-├── bias-platform/
-│   ├── backend/
-│   │   ├── app/
-│   │   │   ├── main.py              # FastAPI entrypoint
-│   │   │   ├── pipeline_controller.py # Pipeline orchestration
-│   │   │   ├── schemas.py            # Pydantic schemas
-│   │   │   ├── config.py             # Configuration
-│   │   │   └── modules/
-│   │   │       ├── module0/          # Data contract
-│   │   │       ├── module1/          # Profiling
-│   │   │       ├── module2/          # Bias discovery
-│   │   │       ├── module3/          # Aggregation
-│   │   │       ├── module4/          # Model training
-│   │   │       ├── module5/          # Fairness metrics
-│   │   │       ├── module6/          # Debiasing
-│   │   │       ├── module7/          # Context engine
-│   │   │       ├── module8/          # Decision + explainability
-│   │   │       ├── module9/          # Validation
-│   │   │       ├── module10/         # Compliance
-│   │   │       └── module11/         # Monitoring
-│   │   └── requirements.txt
-│   └── frontend/
-│       ├── src/
-│       │   ├── App.jsx               # Main component
-│       │   ├── main.jsx              # React entrypoint
-│       │   ├── index.css            # Global styles
-│       │   ├── components/          # UI components
-│       │   └── services/
-│       │       └── api.js           # API client
-│       ├── package.json
-│       └── vite.config.js
-├── run-backend.sh
-├── run-frontend.sh
-└── README.md
+├─ bias-platform/
+│  ├─ backend/                    # FastAPI + ML pipeline
+│  │  ├─ app/
+│  │  │  ├─ main.py               # API entrypoint
+│  │  │  ├─ pipeline_controller.py
+│  │  │  ├─ modules/              # pipeline modules (0,4,5,6,8,9,11)
+│  │  │  ├─ schemas.py
+│  │  │  └─ utils/
+│  │  ├─ requirements.txt
+│  │  └─ .python-version
+│  └─ frontend/                   # React + Vite dashboard
+│     ├─ src/
+│     │  ├─ components/
+│     │  ├─ services/api.js
+│     │  └─ App.jsx
+│     ├─ package.json
+│     └─ vite.config.js
+├─ run-backend.ps1 / run-backend.sh
+├─ run-frontend.ps1 / run-frontend.sh
+└─ test.py, test7.py, test_modules.py
 ```
 
----
+## Tech Stack
 
-## ⚙️ Installation
+### Backend
 
-### 1. Clone & Setup
-```bash
-git clone <repo-url>
-cd CAF-MAI1
+- Python 3.11
+- FastAPI + Uvicorn
+- pandas, numpy
+- scikit-learn (core training path)
+- xgboost and joblib available as dependencies
+- python-dotenv
+- Google Gemini client (`google-generativeai`)
+
+### Frontend
+
+- React 19
+- Vite 4
+- Axios
+- Recharts
+
+## What the App Does
+
+1. Uploads a CSV dataset.
+2. Creates a data contract around selected target and detected metadata.
+3. Lets you choose bias-sensitive columns (for fairness analysis).
+4. Runs an orchestrated backend pipeline:
+   - preprocessing and training
+   - fairness metrics and subgroup analysis
+   - debiasing adjustments
+   - decision/explainability
+   - feasibility validation
+   - monitoring/drift checks
+5. Shows results in a visual dashboard.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+ in `PATH`
+- Node.js + npm in `PATH`
+
+### 1) Backend setup and run
+
+From project root (`CAF-MAI1`):
+
+- **Windows (PowerShell):**
+
+```powershell
+.\run-backend.ps1
 ```
 
-### 2. Backend
+- **Linux/macOS (bash):**
+
 ```bash
-cd bias-platform/backend
-pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
+chmod +x ./run-backend.sh
+./run-backend.sh
 ```
 
-### 3. Frontend
+This installs Python dependencies from `bias-platform/backend/requirements.txt` and runs:
+
 ```bash
-cd bias-platform/frontend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 2) Frontend setup and run
+
+In another terminal from project root:
+
+- **Windows (PowerShell):**
+
+```powershell
+.\run-frontend.ps1
+```
+
+- **Linux/macOS (bash):**
+
+```bash
+chmod +x ./run-frontend.sh
+./run-frontend.sh
+```
+
+This installs npm packages and runs Vite dev server on port `5173`.
+
+### 3) Open the app
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000`
+- Health check: `http://localhost:8000/health`
+
+## Environment Variables
+
+### Backend (`bias-platform/backend/.env`)
+
+Create a `.env` file inside `bias-platform/backend`:
+
+```env
+GEMINI_API_KEY=your_key_here
+```
+
+If omitted, AI explanation features that depend on Gemini may not return enriched text.
+
+### Frontend
+
+Optional:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+If not set, frontend defaults to `http://127.0.0.1:8000`.
+
+## API Endpoints
+
+Base URL: `http://127.0.0.1:8000`
+
+- `GET /health`  
+  Service health status.
+
+- `POST /upload`  
+  Uploads CSV file as multipart form (`file`).
+
+- `POST /init_contract`  
+  Initializes data contract with selected target column.
+
+  Example body:
+
+```json
+{ "target_column": "approved" }
+```
+
+- `POST /select_bias`  
+  Selects bias-sensitive columns.
+
+  Example body:
+
+```json
+{ "bias_columns": ["gender", "age_group"] }
+```
+
+- `POST /run_pipeline`  
+  Executes full analysis pipeline.
+
+- `GET /results`  
+  Returns consolidated results after pipeline run.
+
+- `POST /decision/final`  
+  Final decision endpoint exposed via module 8 router.
+
+## Backend Module Overview
+
+Pipeline orchestration is centered in `app/pipeline_controller.py`, combining outputs from:
+
+- `module0`: Data contract creation / schema & metadata handling
+- `module4`: Train/inference flow
+- `module5`: Fairness metrics + subgroup/intersectional analysis
+- `module6`: Debiasing service
+- `module8`: Decision scoring and explanation
+- `module9`: Operational feasibility / resource validation
+- `module11`: Drift and alert monitoring
+
+## Frontend Overview
+
+Main flow in `src/App.jsx`:
+
+- dataset upload
+- target + bias column selection
+- pipeline execution trigger
+- results rendering via dashboard components
+
+Key UI components:
+
+- `ResultsDashboard.jsx`
+- `FairnessPanel.jsx`
+- `MonitoringCard.jsx`
+- `ExplainabilityPanel.jsx`
+
+API client integration lives in `src/services/api.js`.
+
+## Frontend Scripts
+
+From `bias-platform/frontend`:
+
+```bash
 npm install
 npm run dev
+npm run build
+npm run lint
+npm run preview
 ```
 
-**Backend**: `http://localhost:8000` | **Frontend**: `http://localhost:5173`
+## Testing Status
 
----
+Current repository includes script-style tests:
 
-## 🔌 API Endpoints
+- `test.py`
+- `test7.py`
+- `test_modules.py`
 
-### Core Pipeline
+There is no standardized `pytest` test suite or CI configuration in this project yet.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/upload` | Upload CSV dataset |
-| `POST` | `/init_contract` | Initialize with target column |
-| `POST` | `/select_bias` | Select bias columns |
-| `POST` | `/run_pipeline` | Execute full pipeline |
-| `GET` | `/results` | Get pipeline results |
+## Known Gaps and Notes
 
-### Decision
+- CORS is currently fully open (`allow_origins=["*"]`) for development convenience.
+- Some legacy test references appear out of sync with current module structure.
+- Monitoring UI expects a `trend` field and falls back to `"stable"` if missing.
+- The pipeline appears to keep runtime state in memory (no database persistence configured).
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/decision/final` | Get final decision with explanations |
+## Suggested Next Improvements
 
-### Example Usage
-```bash
-# Upload CSV file
-curl -X POST -F "file=@data.csv" http://localhost:8000/upload
+1. Add formal backend tests with `pytest`.
+2. Add a production deployment path (Docker + environment profiles).
+3. Restrict CORS for non-local environments.
+4. Add persistent storage for datasets, artifacts, and run history.
+5. Add CI checks (`lint`, `test`, and build validation).
 
-# Initialize contract with target column
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"target_column": "outcome"}' \
-  http://localhost:8000/init_contract
+## License
 
-# Select bias columns
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"bias_columns": ["gender", "age"]}' \
-  http://localhost:8000/select_bias
-
-# Run full pipeline
-curl -X POST http://localhost:8000/run_pipeline
-
-# Get results
-curl http://localhost:8000/results
-```
-
----
-
-## 🧠 AI/ML Pipeline
-
-### Module Descriptions
-
-| Module | Name | Function |
-|--------|------|----------|
-| M0 | Data Contract | Validates target/bias columns, builds canonical payload |
-| M1 | Profiling | Row/column counts, nulls, uniqueness |
-| M2 | Bias Discovery | Suggests bias columns, detects hidden bias via clustering |
-| M3 | Aggregation | Harmonizes module outputs into unified response |
-| M4 | Model Training | Preprocessing, logistic regression/XGBoost, inference |
-| M5 | Fairness | Subgroup metrics, bias gaps, intersectional analysis |
-| M6 | Debiasing | Reweighting/resampling, pre/post fairness comparison |
-| M7 | Context Engine | Context weighting based on region, hospital_type, etc. |
-| M8 | Decision | Final decision, confidence, explanations |
-| M9 | Validation | Action feasibility checks |
-| M10 | Compliance | Privacy, role-based access, policy enforcement |
-| M11 | Monitoring | Data/bias drift detection, alerts |
-
-### Fairness Metrics
-
-- **Demographic Parity**: Equal positive rates across groups
-- **Equal Opportunity**: Equal true positive rates
-- **Bias Gap**: Difference in fairness metrics between groups
-- **Subgroup Analysis**: Per-group performance breakdown
-- **Intersectional Fairness**: Multi-attribute bias detection
-
-### Model Configuration
-
-- **Algorithm**: Logistic Regression (default), XGBoost (optional)
-- **Preprocessing**: Median imputation + scaling (numeric), Most-frequent + one-hot (categorical)
-- **Calibration**: Sigmoid calibration for probability reliability
-- **Test Size**: 20% holdout for evaluation
-
----
-
+No explicit license file is currently present in this repository.  
+Add a `LICENSE` file if you plan to distribute the project.
