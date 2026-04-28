@@ -136,6 +136,35 @@ def run_module5(df, y_true, y_pred, bias_columns):
     if gap_values:
         summary["bias_gap"] = round(max(gap_values), 4)
 
+    # ---------------- GLOBAL CONFUSION MATRIX ---------------- #
+    from sklearn.metrics import confusion_matrix
+    try:
+        cm = confusion_matrix(y_true, y_pred)
+        # Handle binary or multiclass
+        if cm.size == 4:
+            tn, fp, fn, tp = cm.ravel()
+            global_cm = {
+                "tn": int(tn),
+                "fp": int(fp),
+                "fn": int(fn),
+                "tp": int(tp)
+            }
+        else:
+            global_cm = cm.tolist()
+    except Exception:
+        global_cm = {"tn": 0, "fp": 0, "fn": 0, "tp": 0}
+
+    # ---------------- OUTCOME DISTRIBUTION ---------------- #
+    try:
+        y_true_counts = pd.Series(y_true).value_counts().to_dict()
+        y_pred_counts = pd.Series(y_pred).value_counts().to_dict()
+        outcome_distribution = {
+            "actual": {str(k): int(v) for k, v in y_true_counts.items()},
+            "predicted": {str(k): int(v) for k, v in y_pred_counts.items()}
+        }
+    except Exception:
+        outcome_distribution = {"actual": {}, "predicted": {}}
+
     # ---------------- INTERPRETATION ---------------- #
     insight = _interpret_bias(summary["bias_gap"])
 
@@ -154,4 +183,6 @@ def run_module5(df, y_true, y_pred, bias_columns):
         "fairness_metrics": fairness_metrics,
         "summary": summary,
         "insight": insight,
+        "global_confusion_matrix": global_cm,
+        "outcome_distribution": outcome_distribution,
     }

@@ -5,8 +5,6 @@ function ColumnSelector({
   loading,
   onTargetChange,
   onBiasChange,
-  onInitContract,
-  onSaveBias,
 }) {
   const biasOptions = columns.filter((column) => column !== targetColumn);
 
@@ -14,10 +12,15 @@ function ColumnSelector({
     <section>
       <h2>Step 2: Select Target + Bias Columns</h2>
 
-      <div className="field-group">
-        <label htmlFor="target-column">Target Column</label>
-        <div className="inline-row">
-          <select id="target-column" value={targetColumn} onChange={(e) => onTargetChange(e.target.value)}>
+      <div className="inline-row align-top">
+        <div className="field-group" style={{ flex: 1 }}>
+          <label htmlFor="target-column">Target Column</label>
+          <select 
+            id="target-column" 
+            value={targetColumn} 
+            onChange={(e) => onTargetChange(e.target.value)}
+            disabled={loading}
+          >
             <option value="">Select target column</option>
             {columns.map((column) => (
               <option key={column} value={column}>
@@ -25,19 +28,15 @@ function ColumnSelector({
               </option>
             ))}
           </select>
-          <button className="btn-secondary" onClick={onInitContract} disabled={loading || !targetColumn}>
-            Initialize Contract
-          </button>
         </div>
-      </div>
 
-      <div className="field-group">
-        <label htmlFor="bias-columns">Bias Columns</label>
-        <div className="inline-row">
+        <div className="field-group" style={{ flex: 1 }}>
+          <label htmlFor="bias-columns">Sensitive Attribute (Bias Column)</label>
           <select
             id="bias-columns"
             value={selectedBias[0] || ""}
             onChange={(e) => onBiasChange(e.target.value ? [e.target.value] : [])}
+            disabled={loading}
           >
             <option value="">Select bias column</option>
             {biasOptions.map((column) => (
@@ -46,11 +45,9 @@ function ColumnSelector({
               </option>
             ))}
           </select>
-          <button className="btn-primary" onClick={onSaveBias} disabled={loading}>
-            Save Bias Selection
-          </button>
         </div>
       </div>
+      <p className="muted">Selection is automatically saved.</p>
     </section>
   );
 }

@@ -3,6 +3,7 @@ import DecisionCard from "./DecisionCard";
 import ExplainabilityPanel from "./ExplainabilityPanel";
 import FairnessPanel from "./FairnessPanel";
 import MonitoringCard from "./MonitoringCard";
+import OutcomeCharts from "./OutcomeCharts";
 import ValidationCard from "./ValidationCard";
 
 function AiAccordion({ title, content, icon }) {
@@ -43,6 +44,12 @@ function ResultsDashboard({ results }) {
         <FairnessPanel
           data={results.fairness}
           debias={results.monitoring?.debiasing_effect || {}}
+        />
+
+        {/* ✅ ADVANCED CHARTS */}
+        <OutcomeCharts
+          fairness={results.fairness}
+          debias={results.monitoring?.debiasing_effect}
         />
 
         {/* ✅ DECISION */}

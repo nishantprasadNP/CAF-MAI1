@@ -42,7 +42,13 @@ function FairnessPanel({ data, debias }) {
               <div className="value">{(accuracy * 100).toFixed(1)}%</div>
               <div className="stat-desc">Overall predictive performance</div>
               <div className="progress-bar">
-                <div className={getProgressClass(accuracy)} style={{ width: `${accuracy * 100}%` }}></div>
+                <div 
+                  className={getProgressClass(accuracy)} 
+                  style={{ 
+                    width: `${(accuracy * 100).toFixed(1)}%`,
+                    minWidth: accuracy > 0 ? '4px' : '0'
+                  }}
+                ></div>
               </div>
             </div>
             <div className="stat-back">
@@ -61,7 +67,13 @@ function FairnessPanel({ data, debias }) {
               <div className="value">{(f1 * 100).toFixed(1)}%</div>
               <div className="stat-desc">Balance of precision and recall</div>
               <div className="progress-bar">
-                <div className={getProgressClass(f1)} style={{ width: `${f1 * 100}%` }}></div>
+                <div 
+                  className={getProgressClass(f1)} 
+                  style={{ 
+                    width: `${(f1 * 100).toFixed(1)}%`,
+                    minWidth: f1 > 0 ? '4px' : '0'
+                  }}
+                ></div>
               </div>
             </div>
             <div className="stat-back">

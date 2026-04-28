@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import ColumnSelector from "./components/ColumnSelector";
 import PipelineRunner from "./components/PipelineRunner";
 import ResultsDashboard from "./components/ResultsDashboard";
@@ -28,6 +28,17 @@ const steps = [
   },
 ];
 
+const LOADING_MESSAGES = [
+  "Initializing AI Pipeline...",
+  "Analyzing Feature Distributions...",
+  "Identifying Bias Patterns...",
+  "Optimizing Fairness Constraints...",
+  "Applying Mitigation Algorithms...",
+  "Generating Compliance Reports...",
+  "Finalizing Decision Dashboard...",
+  "Preparing Insight Visualizations..."
+];
+
 function formatApiError(err, fallbackMessage) {
   const detail = err?.response?.data?.detail;
   const message = typeof detail === "string" ? detail : "";
@@ -49,6 +60,20 @@ function App() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
+
+  // Continuously change loading text
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      let index = 0;
+      interval = setInterval(() => {
+        index = (index + 1) % LOADING_MESSAGES.length;
+        setLoadingMsg(LOADING_MESSAGES[index]);
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const resetAll = () => {
     setStep(0);
@@ -59,6 +84,7 @@ function App() {
     setSelectedBias([]);
     setResults(null);
     setError("");
+    setLoadingMsg(LOADING_MESSAGES[0]);
   };
 
   const selectableColumns = useMemo(() => {
@@ -77,7 +103,22 @@ function App() {
     try {
       const data = await uploadFile(file);
       setUploadData(data);
-      setTargetColumn(data.columns?.[data.columns.length - 1] || "");
+      
+      // Default to "Survived" if it exists, otherwise use last column
+      const defaultTarget = data.columns?.find(c => c.toLowerCase() === "survived") 
+        || data.columns?.[data.columns.length - 1] 
+        || "";
+      
+      setTargetColumn(defaultTarget);
+      
+      // Auto-initialize contract
+      const contractData = await initContract(defaultTarget);
+      setContract(contractData);
+      
+      // Auto-select empty bias initially
+      const biasData = await selectBias([]);
+      setContract((prev) => ({ ...prev, ...biasData }));
+      
       setStep(1);
     } catch (err) {
       setError(formatApiError(err, "Upload failed."));
@@ -86,34 +127,32 @@ function App() {
     }
   };
 
-  const onInitContract = async () => {
-    if (!targetColumn) {
-      setError("Select a target column.");
-      return;
-    }
+  const handleTargetChange = async (col) => {
+    setTargetColumn(col);
+    if (!col) return;
     setLoading(true);
-    setError("");
     try {
-      const data = await initContract(targetColumn);
+      const data = await initContract(col);
       setContract(data);
+      // Reset bias when target changes as the options change
+      const biasData = await selectBias([]);
+      setContract((prev) => ({ ...prev, ...biasData }));
       setSelectedBias([]);
-      setStep(1);
     } catch (err) {
-      setError(formatApiError(err, "Contract initialization failed."));
+      setError(formatApiError(err, "Contract update failed."));
     } finally {
       setLoading(false);
     }
   };
 
-  const onSelectBias = async () => {
+  const handleBiasChange = async (biasCols) => {
+    setSelectedBias(biasCols);
     setLoading(true);
-    setError("");
     try {
-      const data = await selectBias(selectedBias);
+      const data = await selectBias(biasCols);
       setContract((prev) => ({ ...prev, ...data }));
-      setStep(2);
     } catch (err) {
-      setError(formatApiError(err, "Bias selection failed."));
+      setError(formatApiError(err, "Bias update failed."));
     } finally {
       setLoading(false);
     }
@@ -122,9 +161,17 @@ function App() {
   const onRunPipeline = async () => {
     setLoading(true);
     setError("");
+    const startTime = Date.now();
     try {
       await runPipeline();
       const data = await getResults();
+      
+      // Ensure at least 3s for the dynamic text to cycle
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 3000) {
+        await new Promise(r => setTimeout(r, 3000 - elapsed));
+      }
+      
       setResults(data);
       setStep(3);
     } catch (err) {
@@ -193,10 +240,8 @@ function App() {
             targetColumn={targetColumn}
             selectedBias={selectedBias}
             loading={loading}
-            onTargetChange={setTargetColumn}
-            onBiasChange={setSelectedBias}
-            onInitContract={onInitContract}
-            onSaveBias={onSelectBias}
+            onTargetChange={handleTargetChange}
+            onBiasChange={handleBiasChange}
           />
         )}
 
@@ -205,15 +250,20 @@ function App() {
         {results && <ResultsDashboard results={results} />}
 
         {error && <p className="error">{error}</p>}
-        {loading && (
-          <div className="loading-overlay">
-            <div className="spinner-container">
-              <div className="modern-spinner"></div>
-              <p className="loading-text">Processing your request</p>
-            </div>
-          </div>
-        )}
       </main>
+
+      {loading && (
+        <div className="loading-overlay">
+          <div className="spinner-container">
+            <div className="modern-spinner">
+              <div className="neural-node"></div>
+              <div className="neural-node"></div>
+              <div className="neural-node"></div>
+            </div>
+            <p className="loading-text">{loadingMsg}</p>
+          </div>
+        </div>
+      )}
 
       <footer className="footer">
         <div className="footer-bottom">

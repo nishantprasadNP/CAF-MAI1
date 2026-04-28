@@ -41,35 +41,54 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 0.3s ease-out forwards;
+  /* animation: fadeIn 0.3s ease-out forwards; */
 }
 
 .spinner-container {
   background: white;
-  padding: 40px 60px;
+  padding: 60px 100px;
   border-radius: var(--radius-xl);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 32px;
+  min-width: 450px;
 }
 
 .modern-spinner {
-  width: 56px;
-  height: 56px;
-  border: 4px solid #F3F4F6;
-  border-top-color: var(--lime-dark);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+
+.neural-node {
+  width: 14px;
+  height: 14px;
+  background: var(--lime-dark);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: neuralPulse 1.2s infinite ease-in-out;
+}
+
+.neural-node:nth-child(2) { animation-delay: 0.2s; }
+.neural-node:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes neuralPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; filter: blur(0px); }
+  50% { transform: scale(1.5); opacity: 1; filter: blur(1px); box-shadow: 0 0 15px var(--lime); }
 }
 
 .loading-text {
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--black);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--dark-gray);
   margin: 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 body {
@@ -1191,7 +1210,7 @@ select:focus {
 
 /* Progress Bar Animation */
 .progress-bar .fill {
-  animation: fadeIn 0.5s ease-out forwards;
+  /* animation: fadeIn 0.5s ease-out forwards; */
 }
 
 /* Stat Card Number Animation */
@@ -1442,4 +1461,139 @@ select:focus {
 
 .ai-accordion-btn:hover .ai-accordion-icon {
   background: rgba(163, 230, 53, 0.22);
+}
+
+/* ==================== OUTCOME CHARTS & VISUALS ==================== */
+.outcome-charts-wrapper {
+  grid-column: 1 / -1;
+  margin-top: 24px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.chart-card {
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chart-card.wide {
+  grid-column: 1 / -1;
+}
+
+.chart-card h4 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--black);
+  margin: 0 0 20px;
+  width: 100%;
+  text-align: left;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* Confusion Matrix Heatmap */
+.cm-container {
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.cm-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr;
+  grid-template-rows: 40px 100px 100px;
+  gap: 8px;
+}
+
+.cm-label-corner {
+  font-size: 11px;
+  color: var(--muted-gray);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-label-top {
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dark-gray);
+}
+
+.cm-label-side {
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
+  color: var(--dark-gray);
+}
+
+.cm-cell {
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  cursor: default;
+}
+
+.cm-cell:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  z-index: 2;
+}
+
+.cm-value {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 900;
+  font-size: 24px;
+  color: var(--black);
+}
+
+.cm-type {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.cm-legend {
+  margin-top: 16px;
+  text-align: center;
+}
+
+/* Custom Tooltip Styling for Recharts */
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.recharts-default-tooltip {
+  background-color: white !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1) !important;
+  padding: 12px !important;
+}
+
+.recharts-tooltip-label {
+  font-weight: 700 !important;
+  color: var(--black) !important;
+  margin-bottom: 4px !important;
 }
