@@ -1,173 +1,128 @@
+"""
+Module 6: bias mitigation.
+
+Two standard, auditable steps, both fitted on the training split only:
+
+1. Reweighing (Kamiran & Calders): each training row gets weight
+   P(group) * P(label) / P(group, label), so group and label look independent
+   to the learner.
+2. Group-specific decision thresholds: per protected group, the threshold is
+   chosen so that the group's positive-prediction rate on the training split
+   matches the overall rate (demographic-parity post-processing).
+
+The pipeline evaluates the result on the held-out test split.
+"""
+
+import logging
+
 import numpy as np
 import pandas as pd
 
-from app.modules.module5.fairness import compute_fairness_metrics
-from app.modules.module4.preprocess import resample_dataset
 from app.modules.module4.train import train_with_weights
+from app.modules.module5.service import compute_bias_gap_only
+
+logger = logging.getLogger(__name__)
+
+MIN_BIAS_GAP = 0.03
+MIN_GROUP_SIZE = 5
+THRESHOLD_BOUNDS = (0.05, 0.95)
 
 
 # ---------------- UTILS ---------------- #
 
-def _normalize_probs(probs):
-    try:
-        probs = [float(p) for p in probs]
-    except Exception:
-        return [0.5, 0.5]
-
-    total = sum(probs)
-    if total <= 0:
-        return [0.5, 0.5]
-
-    return [p / total for p in probs]
+def _group_keys(df: pd.DataFrame, bias_columns: list[str]) -> pd.Series:
+    cols = [c for c in bias_columns if c in df.columns]
+    if not cols:
+        return pd.Series(["all"] * len(df), index=df.index)
+    keys = df[cols[0]].astype(str)
+    for col in cols[1:]:
+        keys = keys + "|" + df[col].astype(str)
+    return keys
 
 
-def _ensure_two_class_probs(p):
-    if isinstance(p, (list, tuple)) and len(p) >= 2:
-        return _normalize_probs(p)
+def compute_reweighing_weights(groups: pd.Series, y: pd.Series) -> np.ndarray:
+    frame = pd.DataFrame({"g": np.asarray(groups), "y": np.asarray(y)})
+    n = len(frame)
 
-    try:
-        p1 = float(p)
-        return [1 - p1, p1]
-    except Exception:
-        return [0.5, 0.5]
+    p_group = frame["g"].map(frame["g"].value_counts(normalize=True))
+    p_label = frame["y"].map(frame["y"].value_counts(normalize=True))
+    p_joint = frame.groupby(["g", "y"])["y"].transform("size") / n
+
+    weights = (p_group * p_label / p_joint).to_numpy(dtype=float)
+    return weights / weights.mean()
+
+
+def _fit_group_thresholds(probs: np.ndarray, groups: pd.Series) -> dict[str, float]:
+    target_rate = float((probs >= 0.5).mean())
+    if target_rate in (0.0, 1.0):
+        return {}
+
+    thresholds = {}
+    for g in groups.unique():
+        group_probs = probs[(groups == g).to_numpy()]
+        if len(group_probs) < MIN_GROUP_SIZE:
+            continue
+        t = float(np.quantile(group_probs, 1 - target_rate))
+        thresholds[str(g)] = float(np.clip(t, *THRESHOLD_BOUNDS))
+    return thresholds
+
+
+def apply_debiasing(runtime: dict, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Returns (predictions, adjusted positive-class probabilities) for df.
+
+    The adjusted probability moves each row's log-odds by the group threshold's
+    log-odds, so adjusted >= 0.5 exactly when the raw probability clears its
+    group threshold, without pinning values at 0 or 1.
+    """
+    probs = runtime["model"].predict_proba(df)[:, 1]
+    groups = _group_keys(df, runtime["bias_columns"])
+    thresholds = groups.map(runtime["thresholds"]).fillna(0.5).to_numpy(dtype=float)
+
+    eps = 1e-6
+    p = np.clip(probs, eps, 1 - eps)
+    logit = np.log(p / (1 - p)) - np.log(thresholds / (1 - thresholds))
+    adjusted = 1 / (1 + np.exp(-logit))
+    predictions = (probs >= thresholds).astype(int)
+    return predictions, adjusted
 
 
 # ---------------- MAIN ---------------- #
 
-def run_module6(df, X_train, y_train, bias_columns, module5_results):
-
-    print("\n[MODULE 6 START]")
+def run_module6(X_train, y_train, bias_columns, module5_results):
 
     summary = module5_results.get("summary", {})
     bias_gap = float(summary.get("bias_gap", 0.0))
 
-    print("Bias Gap:", bias_gap)
+    logger.info("Module 6: bias gap before mitigation = %.4f", bias_gap)
 
-    if bias_gap < 0.03:
+    if not bias_columns or bias_gap < MIN_BIAS_GAP:
         return {
             "status": "skipped",
-            "reason": "low bias gap",
-            "debiasing_effect": {
-                "before": round(bias_gap, 4),
-                "after": round(bias_gap, 4),
-                "improvement": 0.0,
-                "changed": False,
-            },
+            "reason": f"bias gap {bias_gap:.4f} is below the {MIN_BIAS_GAP} mitigation threshold",
         }
 
-    # ---------------- STEP 1: TRAIN ---------------- #
-    weighted_output = train_with_weights(X_train, y_train, np.ones(len(y_train)))
-    all_probs = weighted_output.get("probabilities", [])
+    groups = _group_keys(X_train, bias_columns)
 
-    prob_list = []
-    base_preds = []
+    # ---------------- STEP 1: REWEIGHED TRAINING ---------------- #
+    weights = compute_reweighing_weights(groups, y_train)
+    model = train_with_weights(X_train, y_train, weights)
 
-    for p in all_probs:
-        probs = _ensure_two_class_probs(p)
-        p1 = probs[1]
+    # ---------------- STEP 2: GROUP THRESHOLDS (train split) ---------------- #
+    train_probs = model.predict_proba(X_train)[:, 1]
+    thresholds = _fit_group_thresholds(train_probs, groups.reset_index(drop=True))
 
-        prob_list.append(p1)
-        base_preds.append(1 if p1 >= 0.5 else 0)
+    runtime = {"model": model, "thresholds": thresholds, "bias_columns": bias_columns}
 
-    global_rate = np.mean(base_preds)
+    train_preds, _ = apply_debiasing(runtime, X_train)
+    train_gap_after = compute_bias_gap_only(X_train, pd.Series(train_preds), bias_columns)
 
-    # ---------------- STEP 2: GROUP RATES ---------------- #
-    group_rates = {}
-    bias_col = bias_columns[0] if bias_columns else None
+    logger.info("Module 6: group thresholds = %s", thresholds)
 
-    if bias_col and bias_col in df.columns:
-        df_temp = df.copy()
-        df_temp["_pred"] = base_preds
-
-        for group, gdf in df_temp.groupby(bias_col):
-            group_rates[group] = gdf["_pred"].mean()
-
-    print("[M6] Group rates:", group_rates)
-
-    # ---------------- STEP 3: PROBABILITY ADJUSTMENT ---------------- #
-    debiased_predictions = []
-    debiased_probs = []
-
-    # 🔥 stronger scaling based on bias
-    strength = min(0.6, bias_gap * 1.2)
-
-    for i, p1 in enumerate(prob_list):
-
-        if bias_col and bias_col in df.columns:
-            group = df.iloc[i][bias_col]
-            group_rate = group_rates.get(group, global_rate)
-
-            # normalize delta (avoid explosion)
-            delta = global_rate - group_rate
-
-            # 🔥 controlled adjustment
-            # 🔥 stronger correction using ratio-based scaling
-            if abs(global_rate - group_rate) > 1e-6:
-                correction = (global_rate / (group_rate + 1e-6)) - 1
-            else:
-                correction = 0
-
-            adjustment = strength * correction * 0.2
-
-            p1_new = p1 + adjustment
-        else:
-            p1_new = p1
-
-        # 🛡 clamp to avoid extreme collapse
-        p1_new = max(0.05, min(0.95, p1_new))
-
-        pred = 1 if p1_new >= 0.5 else 0
-
-        debiased_predictions.append(pred)
-        debiased_probs.append(p1_new)
-
-    print("[M6] Sample debiased probs:", debiased_probs[:10])
-
-    # ---------------- STEP 4: FAIRNESS AFTER ---------------- #
-    try:
-        after_metrics = compute_fairness_metrics(
-            df=df,
-            y_true=y_train,
-            y_pred=pd.Series(debiased_predictions, index=df.index),
-            bias_columns=bias_columns,
-        )
-        after_bias = float(after_metrics.get("summary", {}).get("bias_gap", bias_gap))
-    except Exception as e:
-        print("[M6 ERROR]:", e)
-        after_bias = bias_gap
-
-    # ---------------- STEP 5: IMPROVEMENT ---------------- #
-    improvement = max(0.0, bias_gap - after_bias)
-    changed = improvement > 0.01
-
-    print("[M6] Before:", bias_gap, "After:", after_bias)
-
-    # ---------------- OPTIONAL RESAMPLING ---------------- #
-    X_res, y_res = resample_dataset(X_train, y_train)
-    resampled_output = train_with_weights(X_res, y_res, np.ones(len(y_res)))
-
-    # ---------------- FINAL ---------------- #
     return {
+        "_runtime": runtime,
         "status": "applied",
-        "reason": "enhanced probability-based debiasing applied",
-
-        "reweighted_results": {
-            "predictions": debiased_predictions,
-            "probabilities": debiased_probs,
-        },
-
-        "resampled_results": {
-            "predictions": resampled_output.get("predictions", []),
-            "probabilities": [
-                _ensure_two_class_probs(p)[1]
-                for p in resampled_output.get("probabilities", [])
-            ],
-        },
-
-        "debiasing_effect": {
-            "before": round(bias_gap, 4),
-            "after": round(after_bias, 4),
-            "improvement": round(improvement, 4),
-            "changed": changed,
-        },
+        "reason": "reweighing + group-specific decision thresholds (fitted on training split)",
+        "group_thresholds": {g: round(t, 4) for g, t in thresholds.items()},
+        "train_bias_gap_after": train_gap_after,
     }

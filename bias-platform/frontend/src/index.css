@@ -163,22 +163,6 @@ body {
   background: rgba(17, 17, 17, 0.08);
 }
 
-.search-input {
-  background: white;
-  border: none;
-  border-radius: var(--radius-pill);
-  padding: 12px 20px;
-  font-size: 14px;
-  width: 240px;
-  font-family: inherit;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.search-input:focus {
-  outline: 2px solid var(--black);
-  outline-offset: 2px;
-}
-
 .btn-new-run {
   background: var(--black);
   color: white;
@@ -510,7 +494,8 @@ input[type="file"] {
 
 select,
 input[type="text"],
-input[type="search"] {
+input[type="search"],
+input[type="number"] {
   background: white;
   border: 2px solid var(--dark-gray);
   border-radius: var(--radius-md);
@@ -1249,11 +1234,6 @@ select:focus {
 }
 
 @media (max-width: 768px) {
-  .search-input {
-    width: 100%;
-    order: 3;
-  }
-  
   .hero h1 {
     font-size: 36px;
   }
@@ -1361,19 +1341,10 @@ select:focus {
   font-size: 14px;
 }
 
-.social-links {
-  display: flex;
-  gap: 24px;
-}
-
-.social-links a {
-  color: #666;
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-.social-links a:hover {
-  color: var(--lime);
+.alert-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
 }
 
 /* ==================== AI ACCORDION ==================== */

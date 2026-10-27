@@ -22,7 +22,7 @@ def compute_subgroup_metrics(df, y_true, y_pred, bias_columns):
 
             preds = y_pred.iloc[idx]
 
-            # 🔥 CRITICAL: positive prediction rate
+            # Positive-prediction rate per group
             positive_rate = (preds == 1).mean()
 
             col_metrics[str(val)] = {

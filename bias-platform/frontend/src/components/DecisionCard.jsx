@@ -11,15 +11,21 @@ function formatFeature(name) {
   if (!name) return "";
   return name
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .replace("Pclass", "Passenger Class")
-    .replace("Sex", "Gender")
-    .replace("Fare", "Ticket Fare")
-    .replace("Cabin", "Cabin Info");
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function DecisionCard({ decision }) {
+function pct(probabilities) {
+  const p = probabilities?.[1];
+  return typeof p === "number" ? (p * 100).toFixed(1) + "%" : "N/A";
+}
+
+function DecisionCard({ decision, loading, onScoreRecord }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [rowInput, setRowInput] = useState(String(decision?.row_index ?? 0));
+
+  useEffect(() => {
+    setRowInput(String(decision?.row_index ?? 0));
+  }, [decision?.row_index]);
   const [visibleCount, setVisibleCount] = useState(0);
   const [animKey, setAnimKey] = useState(0);
 
@@ -58,12 +64,46 @@ function DecisionCard({ decision }) {
     decision?.explanation ||
     "No explanation available";
 
+  const maxRow = Math.max(0, (decision?.n_rows ?? 1) - 1);
+  const rowValue = Number(rowInput);
+  const rowValid = rowInput !== "" && Number.isInteger(rowValue) && rowValue >= 0 && rowValue <= maxRow;
+
+  const submitRow = (e) => {
+    e.preventDefault();
+    if (rowValid && onScoreRecord) onScoreRecord(rowValue);
+  };
+
   return (
     <div className="result-card decision-card">
       <h3>Decision</h3>
 
-      <p><strong>Decision:</strong> {decision?.decision || "N/A"}</p>
+      <form className="inline-row" onSubmit={submitRow}>
+        <div className="field-group">
+          <label htmlFor="record-index">Record # (0–{maxRow.toLocaleString()})</label>
+          <input
+            id="record-index"
+            type="number"
+            min={0}
+            max={maxRow}
+            value={rowInput}
+            disabled={loading}
+            onChange={(e) => setRowInput(e.target.value)}
+          />
+        </div>
+        <button type="submit" className="btn-primary" disabled={loading || !rowValid}>
+          Score record
+        </button>
+      </form>
+
+      <p>
+        <strong>Decision:</strong> {decision?.decision || "N/A"}
+        {decision?.predicted_class != null && ` (predicted: ${decision.predicted_class})`}
+      </p>
       <p><strong>Confidence:</strong> {confidence}</p>
+      <p>
+        <strong>Positive probability:</strong> {pct(decision?.original_probabilities)} original
+        {decision?.debiased && ` → ${pct(decision?.probabilities)} after mitigation`}
+      </p>
       <p className={riskClass(biasRisk)}><strong>Bias Risk:</strong> {biasRisk}</p>
 
       <div className="decision-why-wrapper">

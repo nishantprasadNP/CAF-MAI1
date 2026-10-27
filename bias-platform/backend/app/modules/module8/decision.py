@@ -1,4 +1,5 @@
 from typing import Any
+from app.modules.module5.service import classify_bias, max_bias_gap
 from app.utils.gemini_client import generate_explanation as generate_gemini_explanation
 
 
@@ -11,42 +12,31 @@ def make_decision(probabilities: list[float]) -> dict[str, Any]:
     label = int(max(range(len(probabilities)), key=lambda i: probabilities[i]))
     confidence = float(probabilities[label])
 
-    # normalize confidence
-    if confidence < 0.5:
-        confidence = 1 - confidence
-
     return {"label": label, "confidence": round(confidence, 3)}
 
 
 # ---------------- BIAS FLAG ---------------- #
 
 def _get_bias_flag(fairness_output: dict) -> tuple[str, float]:
-    bias_gaps = fairness_output.get("bias_gaps", {}) if isinstance(fairness_output, dict) else {}
+    if not isinstance(fairness_output, dict):
+        return "low", 0.0
 
-    max_gap = 0.0
-    for col in bias_gaps.values():
-        if isinstance(col, dict):
-            for val in col.values():
-                if isinstance(val, (int, float)):
-                    max_gap = max(max_gap, float(val))
+    gap = fairness_output.get("summary", {}).get("bias_gap")
+    if not isinstance(gap, (int, float)):
+        gap = max_bias_gap(fairness_output.get("bias_gaps", {}))
 
-    if max_gap > 0.2:
-        return "high", max_gap
-    elif max_gap > 0.08:
-        return "moderate", max_gap
-    return "low", max_gap
+    return classify_bias(float(gap)), float(gap)
 
 
 # ---------------- FEATURE EXTRACTION ---------------- #
 
 def _get_top_features(top_features: dict) -> list:
     """
-    Always return meaningful features.
-    If empty → return empty list (NO FAKE FEATURES)
+    Top 5 features by absolute model coefficient; empty if none are available.
     """
 
     if not top_features:
-        return []  # 🔥 FIX: remove fake fallback
+        return []
 
     sorted_features = sorted(
         top_features.items(),
@@ -68,8 +58,8 @@ def _build_feature_explanation(top_features_list: list) -> str:
 
     parts = []
     for f in top_features_list[:3]:
-        sign = "increased" if f["impact"] > 0 else "decreased"
-        parts.append(f"{f['feature']} ({sign} likelihood by {abs(f['impact']):.2f})")
+        direction = "raises" if f["impact"] > 0 else "lowers"
+        parts.append(f"{f['feature']} ({direction} approval odds, coefficient {f['impact']:+.2f})")
 
     return "Key factors: " + ", ".join(parts)
 
@@ -97,15 +87,6 @@ def run_module8(
     # ---------------- FEATURES ---------------- #
     top_features_list = _get_top_features(top_features)
 
-    # ---------------- CONTRIBUTIONS ---------------- #
-    feature_score = sum(abs(f["impact"]) for f in top_features_list)
-    bias_score = max_gap
-
-    total = feature_score + bias_score + 1e-6
-
-    feature_contribution = feature_score / total
-    bias_contribution = bias_score / total
-
     # ---------------- EXPLANATION ---------------- #
 
     feature_expl = _build_feature_explanation(top_features_list)
@@ -113,7 +94,7 @@ def run_module8(
     summary_text = (
         f"Decision: {'APPROVE' if decision['label'] == 1 else 'REJECT'} "
         f"(confidence {decision['confidence']:.2f}). "
-        f"{feature_expl}. "
+        f"{feature_expl.rstrip('.')}. "
         f"Bias risk: {bias_flag}."
     )
 
@@ -146,10 +127,9 @@ def run_module8(
         "confidence": decision["confidence"],
 
         "bias_flag": bias_flag,
-        "biasContribution": round(float(max_gap), 4),
+        "bias_gap": round(float(max_gap), 4),
 
         "top_features": top_features_list,
-        "featureContribution": round(feature_contribution, 4),
 
         "explanation": summary_text,
         "ai_explanation": ai_explanation,

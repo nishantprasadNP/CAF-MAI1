@@ -1,5 +1,6 @@
 function ColumnSelector({
   columns,
+  binaryColumns,
   targetColumn,
   selectedBias,
   loading,
@@ -22,11 +23,14 @@ function ColumnSelector({
             disabled={loading}
           >
             <option value="">Select target column</option>
-            {columns.map((column) => (
-              <option key={column} value={column}>
-                {column}
-              </option>
-            ))}
+            {columns.map((column) => {
+              const usable = binaryColumns.includes(column);
+              return (
+                <option key={column} value={column} disabled={!usable}>
+                  {usable ? column : `${column} (not two-valued)`}
+                </option>
+              );
+            })}
           </select>
         </div>
 
@@ -47,7 +51,9 @@ function ColumnSelector({
           </select>
         </div>
       </div>
-      <p className="muted">Selection is automatically saved.</p>
+      <p className="muted">
+        The target must have exactly two outcomes (e.g. yes/no, 0/1). Selection is automatically saved.
+      </p>
     </section>
   );
 }
