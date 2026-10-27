@@ -1,16 +1,16 @@
-from sklearn.metrics import accuracy_score, f1_score
 import math
+
+import pandas as pd
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 from app.modules.module5.bias_gap import compute_bias_gap
 from app.modules.module5.fairness import compute_fairness_metrics
 from app.modules.module5.intersectional import compute_intersectional_metrics
 from app.modules.module5.subgroup import compute_subgroup_metrics
+from app.utils.gemini_client import generate_explanation
 
-try:
-    from app.utils.gemini_client import generate_text
-    GEMINI_AVAILABLE = True
-except Exception:
-    GEMINI_AVAILABLE = False
+# Shared by every stage that labels a bias gap (decision, monitoring, UI).
+BIAS_LEVEL_THRESHOLDS = {"moderate": 0.1, "high": 0.2}
 
 
 def _safe_float(x):
@@ -23,38 +23,56 @@ def _safe_float(x):
         return 0.0
 
 
+def classify_bias(bias_gap: float) -> str:
+    if bias_gap >= BIAS_LEVEL_THRESHOLDS["high"]:
+        return "high"
+    if bias_gap >= BIAS_LEVEL_THRESHOLDS["moderate"]:
+        return "moderate"
+    return "low"
+
+
 def _interpret_bias(bias_gap: float) -> dict:
-    if bias_gap < 0.05:
-        return {"bias_level": "low", "message": "Model is fairly balanced"}
-    elif bias_gap < 0.15:
-        return {"bias_level": "moderate", "message": "Some disparity detected across groups"}
-    else:
-        return {"bias_level": "high", "message": "Significant bias detected across subgroups"}
+    level = classify_bias(bias_gap)
+    messages = {
+        "low": "Model is fairly balanced",
+        "moderate": "Some disparity detected across groups",
+        "high": "Significant bias detected across subgroups",
+    }
+    return {"bias_level": level, "message": messages[level]}
 
 
-def _generate_ai_insight(summary, bias_gaps):
-    if not GEMINI_AVAILABLE:
-        return None
+def max_bias_gap(bias_gaps: dict) -> float:
+    gaps = [
+        float(col["gap"])
+        for col in bias_gaps.values()
+        if isinstance(col, dict) and isinstance(col.get("gap"), (int, float))
+    ]
+    return round(max(gaps), 4) if gaps else 0.0
 
-    try:
-        prompt = f"""
-        Analyze fairness of a model:
 
-        Bias Gap: {summary.get("bias_gap")}
-        Demographic Parity: {summary.get("demographic_parity")}
-        Equal Opportunity: {summary.get("equal_opportunity")}
+def compute_bias_gap_only(df, y_pred, bias_columns) -> float:
+    """Bias gap for a set of predictions without the full metric suite."""
+    subgroup_metrics = compute_subgroup_metrics(df=df, y_true=None, y_pred=y_pred, bias_columns=bias_columns)
+    return max_bias_gap(compute_bias_gap(subgroup_metrics=subgroup_metrics))
 
-        Give a short 2-line explanation of fairness issues.
-        """
 
-        return generate_text(prompt)
-    except Exception:
-        return None
+def _generate_ai_insight(summary):
+    prompt = f"""
+    Analyze fairness of a binary classification model:
+
+    Bias Gap (max difference in positive-prediction rate between groups): {summary.get("bias_gap")}
+    Average Demographic Parity: {summary.get("demographic_parity")}
+    Average Equal Opportunity: {summary.get("equal_opportunity")}
+
+    Give a short 2-line explanation of fairness issues.
+    """
+    explanation = generate_explanation(prompt)
+    return None if explanation == "Explanation unavailable" else explanation
 
 
 # ---------------- MAIN ---------------- #
 
-def run_module5(df, y_true, y_pred, bias_columns):
+def run_module5(df, y_true, y_pred, bias_columns, explain: bool = False):
 
     # ---------------- GLOBAL METRICS ---------------- #
     try:
@@ -95,7 +113,7 @@ def run_module5(df, y_true, y_pred, bias_columns):
     summary = {
         "demographic_parity": 0.0,
         "equal_opportunity": 0.0,
-        "bias_gap": 0.0,
+        "bias_gap": max_bias_gap(bias_gaps),
         "groups": {},
     }
 
@@ -103,7 +121,7 @@ def run_module5(df, y_true, y_pred, bias_columns):
     eo_values = []
 
     if isinstance(fairness_metrics, dict):
-        for column_payload in fairness_metrics.values():
+        for column, column_payload in fairness_metrics.items():
             if not isinstance(column_payload, dict):
                 continue
 
@@ -115,7 +133,7 @@ def run_module5(df, y_true, y_pred, bias_columns):
 
                 if isinstance(dp, (int, float)):
                     dp_values.append(dp)
-                    summary["groups"][str(group)] = round(dp, 4)
+                    summary["groups"][f"{column}={group}"] = round(dp, 4)
 
                 if isinstance(eo, (int, float)):
                     eo_values.append(eo)
@@ -126,57 +144,31 @@ def run_module5(df, y_true, y_pred, bias_columns):
     if eo_values:
         summary["equal_opportunity"] = round(sum(eo_values) / len(eo_values), 4)
 
-    gap_values = [
-        val
-        for col in bias_gaps.values()
-        for val in col.values()
-        if isinstance(val, (int, float))
-    ]
-
-    if gap_values:
-        summary["bias_gap"] = round(max(gap_values), 4)
-
     # ---------------- GLOBAL CONFUSION MATRIX ---------------- #
-    from sklearn.metrics import confusion_matrix
     try:
-        cm = confusion_matrix(y_true, y_pred)
-        # Handle binary or multiclass
-        if cm.size == 4:
-            tn, fp, fn, tp = cm.ravel()
-            global_cm = {
-                "tn": int(tn),
-                "fp": int(fp),
-                "fn": int(fn),
-                "tp": int(tp)
-            }
-        else:
-            global_cm = cm.tolist()
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+        global_cm = {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)}
     except Exception:
         global_cm = {"tn": 0, "fp": 0, "fn": 0, "tp": 0}
 
     # ---------------- OUTCOME DISTRIBUTION ---------------- #
-    try:
-        y_true_counts = pd.Series(y_true).value_counts().to_dict()
-        y_pred_counts = pd.Series(y_pred).value_counts().to_dict()
-        outcome_distribution = {
-            "actual": {str(k): int(v) for k, v in y_true_counts.items()},
-            "predicted": {str(k): int(v) for k, v in y_pred_counts.items()}
-        }
-    except Exception:
-        outcome_distribution = {"actual": {}, "predicted": {}}
+    y_true_counts = pd.Series(y_true).value_counts().to_dict()
+    y_pred_counts = pd.Series(y_pred).value_counts().to_dict()
+    outcome_distribution = {
+        "actual": {str(k): int(v) for k, v in y_true_counts.items()},
+        "predicted": {str(k): int(v) for k, v in y_pred_counts.items()},
+    }
 
     # ---------------- INTERPRETATION ---------------- #
     insight = _interpret_bias(summary["bias_gap"])
-
-    # ---------------- GEMINI (OPTIONAL) ---------------- #
-    ai_explanation = _generate_ai_insight(summary, bias_gaps)
-
-    insight["ai_explanation"] = ai_explanation
+    insight["ai_explanation"] = _generate_ai_insight(summary) if explain else None
 
     return {
         "accuracy": accuracy,
         "f1": f1,
-        "num_fairness_metrics": len(fairness_metrics) if isinstance(fairness_metrics, dict) else 0,
+        "evaluated_rows": int(len(df)),
+        # Demographic parity, equal opportunity, equalized odds, predictive parity per attribute.
+        "num_fairness_metrics": 4 * sum(1 for v in fairness_metrics.values() if isinstance(v, dict) and "groups" in v),
         "subgroup_metrics": subgroup_metrics,
         "bias_gaps": bias_gaps,
         "intersectional": intersectional,

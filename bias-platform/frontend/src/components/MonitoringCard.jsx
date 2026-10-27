@@ -13,7 +13,7 @@ function MonitoringCard({ monitoring }) {
       <h3>Monitoring</h3>
 
       <p>
-        <strong>Data Drift:</strong> <span className={classifyDrift(dataDrift)}>{dataDrift.toFixed(2)}</span>
+        <strong>Data Drift (train vs. evaluation, PSI):</strong> <span className={classifyDrift(dataDrift)}>{dataDrift.toFixed(2)}</span>
       </p>
 
       <p>
@@ -21,15 +21,21 @@ function MonitoringCard({ monitoring }) {
       </p>
 
       <p>
-        <strong>Trend:</strong> {monitoring?.trend || "stable"}
+        <strong>Bias Trend:</strong> {monitoring?.trend || "baseline"}
+        {typeof monitoring?.previous_bias === "number" &&
+          ` (${monitoring.previous_bias.toFixed(2)} → ${Number(monitoring?.current_bias ?? 0).toFixed(2)})`}
       </p>
 
-      <p>
-        <strong>Alerts:</strong>{" "}
-        {monitoring?.alerts?.length
-          ? monitoring.alerts.join(", ")
-          : "None"}
-      </p>
+      <strong>Alerts:</strong>
+      {monitoring?.alerts?.length ? (
+        <ul className="alert-list">
+          {monitoring.alerts.map((alert) => (
+            <li key={alert}>{alert}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>None</p>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import ColumnSelector from "./components/ColumnSelector";
 import PipelineRunner from "./components/PipelineRunner";
 import ResultsDashboard from "./components/ResultsDashboard";
 import UploadPanel from "./components/UploadPanel";
-import { getResults, initContract, runPipeline, selectBias, uploadFile } from "./services/api";
+import { initContract, runPipeline, scoreRecord, selectBias, uploadFile } from "./services/api";
 
 const steps = [
   { 
@@ -40,6 +40,16 @@ const LOADING_MESSAGES = [
 ];
 
 function formatApiError(err, fallbackMessage) {
+  if (err?.code === "ECONNABORTED") {
+    return "The request timed out. The backend may be overloaded or stuck — check its terminal for errors and try again.";
+  }
+  if (err?.request && !err?.response) {
+    return "Cannot reach the backend. Make sure it is running (./run-backend.sh) and restart the frontend so it picks up the backend port.";
+  }
+  // The dev-server proxy answers with a bare 5xx (no "detail") when the backend is down.
+  if (err?.response?.status >= 500 && typeof err?.response?.data?.detail !== "string") {
+    return "The frontend server could not reach the backend. Make sure it is running (./run-backend.sh), then restart ./run-frontend.sh.";
+  }
   const detail = err?.response?.data?.detail;
   const message = typeof detail === "string" ? detail : "";
 
@@ -51,6 +61,7 @@ function formatApiError(err, fallbackMessage) {
 }
 
 function App() {
+  // Number of completed steps (0 = nothing done yet, 4 = dashboard shown).
   const [step, setStep] = useState(0);
   const [file, setFile] = useState(null);
   const [uploadData, setUploadData] = useState(null);
@@ -60,12 +71,15 @@ function App() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [running, setRunning] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
+  const [availableResources, setAvailableResources] = useState(8);
 
-  // Continuously change loading text
+  // Continuously change loading text while the pipeline runs
   useEffect(() => {
     let interval;
-    if (loading) {
+    if (running) {
+      setLoadingMsg(LOADING_MESSAGES[0]);
       let index = 0;
       interval = setInterval(() => {
         index = (index + 1) % LOADING_MESSAGES.length;
@@ -73,7 +87,7 @@ function App() {
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [running]);
 
   const resetAll = () => {
     setStep(0);
@@ -84,14 +98,12 @@ function App() {
     setSelectedBias([]);
     setResults(null);
     setError("");
-    setLoadingMsg(LOADING_MESSAGES[0]);
   };
 
   const selectableColumns = useMemo(() => {
     if (uploadData?.columns?.length) return uploadData.columns;
-    if (!contract?.X?.length) return [];
-    return Object.keys(contract.X[0]);
-  }, [contract, uploadData]);
+    return [];
+  }, [uploadData]);
 
   const onUpload = async () => {
     if (!file) {
@@ -100,26 +112,31 @@ function App() {
     }
     setLoading(true);
     setError("");
+    setUploadData(null);
+    setContract(null);
+    setTargetColumn("");
+    setSelectedBias([]);
+    setResults(null);
+    setStep(0);
     try {
       const data = await uploadFile(file);
       setUploadData(data);
-      
-      // Default to "Survived" if it exists, otherwise use last column
-      const defaultTarget = data.columns?.find(c => c.toLowerCase() === "survived") 
-        || data.columns?.[data.columns.length - 1] 
-        || "";
-      
-      setTargetColumn(defaultTarget);
-      
-      // Auto-initialize contract
-      const contractData = await initContract(defaultTarget);
-      setContract(contractData);
-      
-      // Auto-select empty bias initially
-      const biasData = await selectBias([]);
-      setContract((prev) => ({ ...prev, ...biasData }));
-      
       setStep(1);
+
+      // Default the target to the last column; the user can change it.
+      // The backend suggests a two-valued column (e.g. "Survived", "isFraud").
+      const defaultTarget = data.suggested_target || "";
+      setTargetColumn(defaultTarget);
+
+      if (!defaultTarget) {
+        setError("No column has exactly two values, so there is no usable target. Bias analysis needs a yes/no style outcome column.");
+      } else {
+        try {
+          setContract(await initContract(defaultTarget));
+        } catch (err) {
+          setError(formatApiError(err, "Could not use that column as target.") + " Pick a different target column.");
+        }
+      }
     } catch (err) {
       setError(formatApiError(err, "Upload failed."));
     } finally {
@@ -129,15 +146,16 @@ function App() {
 
   const handleTargetChange = async (col) => {
     setTargetColumn(col);
+    setError("");
+    setResults(null);
+    setContract(null);
+    // Changing the target resets the bias selection on the backend too.
+    setSelectedBias([]);
+    setStep(1);
     if (!col) return;
     setLoading(true);
     try {
-      const data = await initContract(col);
-      setContract(data);
-      // Reset bias when target changes as the options change
-      const biasData = await selectBias([]);
-      setContract((prev) => ({ ...prev, ...biasData }));
-      setSelectedBias([]);
+      setContract(await initContract(col));
     } catch (err) {
       setError(formatApiError(err, "Contract update failed."));
     } finally {
@@ -147,11 +165,16 @@ function App() {
 
   const handleBiasChange = async (biasCols) => {
     setSelectedBias(biasCols);
+    setError("");
+    setResults(null);
+    setStep(biasCols.length ? 2 : 1);
     setLoading(true);
     try {
       const data = await selectBias(biasCols);
       setContract((prev) => ({ ...prev, ...data }));
     } catch (err) {
+      setSelectedBias([]);
+      setStep(1);
       setError(formatApiError(err, "Bias update failed."));
     } finally {
       setLoading(false);
@@ -160,12 +183,12 @@ function App() {
 
   const onRunPipeline = async () => {
     setLoading(true);
+    setRunning(true);
     setError("");
     const startTime = Date.now();
     try {
-      await runPipeline();
-      const data = await getResults();
-      
+      const data = await runPipeline({ rowIndex: 0, availableResources });
+
       // Ensure at least 3s for the dynamic text to cycle
       const elapsed = Date.now() - startTime;
       if (elapsed < 3000) {
@@ -173,9 +196,23 @@ function App() {
       }
       
       setResults(data);
-      setStep(3);
+      setStep(4);
     } catch (err) {
       setError(formatApiError(err, "Pipeline run failed."));
+    } finally {
+      setLoading(false);
+      setRunning(false);
+    }
+  };
+
+  const onScoreRecord = async (rowIndex) => {
+    setLoading(true);
+    setError("");
+    try {
+      const { decision, validation } = await scoreRecord({ rowIndex, availableResources });
+      setResults((prev) => ({ ...prev, decision, validation }));
+    } catch (err) {
+      setError(formatApiError(err, "Scoring the record failed."));
     } finally {
       setLoading(false);
     }
@@ -186,7 +223,6 @@ function App() {
       <header className="topbar">
         <div className="brand">Bias Platform</div>
         <nav className="topnav">
-          <input type="search" className="search-input" placeholder="Search..." />
           <a href="#home">Home</a>
           <a href="#pipeline">Pipeline</a>
           <a href="#results">Results</a>
@@ -211,7 +247,7 @@ function App() {
           <div className="stepper-wrapper">
             <div className="stepper">
               {steps.map((s, idx) => (
-                <div key={s.label} className={`step ${step >= idx ? "active" : ""}`}>
+                <div key={s.label} className={`step ${step > idx ? "active" : ""}`}>
                   <div className="step-header">
                     <div className="step-icon">{s.icon}</div>
                     <div className="step-number">{idx + 1}</div>
@@ -226,7 +262,7 @@ function App() {
             <div className="timeline-wave-container">
               <div 
                 className="timeline-wave-fill" 
-                style={{ width: `${step === 0 ? 15 : (step / (steps.length - 1)) * 100}%` }}
+                style={{ width: `${(step / steps.length) * 100}%` }}
               ></div>
             </div>
           </div>
@@ -237,6 +273,7 @@ function App() {
         {uploadData && (
           <ColumnSelector
             columns={selectableColumns}
+            binaryColumns={uploadData?.binary_columns || []}
             targetColumn={targetColumn}
             selectedBias={selectedBias}
             loading={loading}
@@ -245,9 +282,18 @@ function App() {
           />
         )}
 
-        {contract && <PipelineRunner loading={loading} hasResults={Boolean(results)} onRunPipeline={onRunPipeline} />}
+        {contract && (
+          <PipelineRunner
+            loading={loading}
+            hasResults={Boolean(results)}
+            canRun={selectedBias.length > 0}
+            availableResources={availableResources}
+            onResourcesChange={setAvailableResources}
+            onRunPipeline={onRunPipeline}
+          />
+        )}
 
-        {results && <ResultsDashboard results={results} />}
+        {results && <ResultsDashboard results={results} loading={loading} onScoreRecord={onScoreRecord} />}
 
         {error && <p className="error">{error}</p>}
       </main>
@@ -260,19 +306,14 @@ function App() {
               <div className="neural-node"></div>
               <div className="neural-node"></div>
             </div>
-            <p className="loading-text">{loadingMsg}</p>
+            <p className="loading-text">{running ? loadingMsg : "Working... large files can take a minute"}</p>
           </div>
         </div>
       )}
 
       <footer className="footer">
         <div className="footer-bottom">
-          <p>&copy; {new Date().getFullYear()} Bias Platform Inc. All rights reserved.</p>
-          <div className="social-links">
-            <a href="#twitter">Twitter</a>
-            <a href="#github">GitHub</a>
-            <a href="#linkedin">LinkedIn</a>
-          </div>
+          <p>&copy; {new Date().getFullYear()} Bias Platform</p>
         </div>
       </footer>
     </div>

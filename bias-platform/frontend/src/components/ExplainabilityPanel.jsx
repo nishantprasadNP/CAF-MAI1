@@ -35,11 +35,12 @@ function ExplainabilityPanel({ explainability }) {
       <h3>Explainability</h3>
 
       <p>
-        <strong>Bias Contribution:</strong>{" "}
-        {explainability?.biasContribution ?? "N/A"}
+        <strong>Bias Gap (evaluation split):</strong>{" "}
+        {typeof explainability?.bias_gap === "number" ? explainability.bias_gap.toFixed(3) : "N/A"}
       </p>
 
       <h4>Top Features</h4>
+      <p className="muted">Model coefficients on standardized features: positive values raise the odds of a positive outcome.</p>
 
       <ul className="feature-list">
         {features.length ? (

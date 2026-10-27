@@ -28,14 +28,15 @@ function AiAccordion({ title, content, icon }) {
   );
 }
 
-function ResultsDashboard({ results }) {
+function ResultsDashboard({ results, loading, onScoreRecord }) {
   if (!results) return null;
 
   return (
     <section id="results">
       <h2>Multi-Layer Results Dashboard</h2>
       <p className="muted">
-        Decision intelligence view across fairness, validation, and monitoring layers.
+        Fairness metrics are measured on the held-out evaluation split
+        ({(results.fairness?.evaluated_rows ?? 0).toLocaleString()} rows); the decision is for a single record you can choose.
       </p>
 
       <div className="results-grid">
@@ -49,11 +50,15 @@ function ResultsDashboard({ results }) {
         {/* ✅ ADVANCED CHARTS */}
         <OutcomeCharts
           fairness={results.fairness}
-          debias={results.monitoring?.debiasing_effect}
+          classLabels={results.classLabels}
         />
 
         {/* ✅ DECISION */}
-        <DecisionCard decision={results.decision} />
+        <DecisionCard
+          decision={results.decision}
+          loading={loading}
+          onScoreRecord={onScoreRecord}
+        />
 
         {/* ✅ VALIDATION */}
         <ValidationCard validation={results.validation} />

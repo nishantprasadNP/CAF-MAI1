@@ -1,8 +1,8 @@
 import { Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
-const COLORS = ['#C8F000', '#111111', '#EF4444', '#F59E0B', '#22C55E'];
-
-function ConfusionMatrix({ cm }) {
+function ConfusionMatrix({ cm, classLabels }) {
+  const pos = `Pos (${classLabels?.[1] ?? 1})`;
+  const neg = `Neg (${classLabels?.[0] ?? 0})`;
   if (!cm || typeof cm !== 'object') {
     return (
       <div className="empty-chart" style={{ height: 450 }}>
@@ -26,10 +26,10 @@ function ConfusionMatrix({ cm }) {
     <div className="cm-container" style={{ width: '100%' }}>
       <div className="cm-grid" style={{ margin: '0 auto', maxWidth: '400px' }}>
         <div className="cm-label-corner">Actual \ Pred</div>
-        <div className="cm-label-top">Pos (1)</div>
-        <div className="cm-label-top">Neg (0)</div>
+        <div className="cm-label-top">{pos}</div>
+        <div className="cm-label-top">{neg}</div>
 
-        <div className="cm-label-side">Pos (1)</div>
+        <div className="cm-label-side">{pos}</div>
         <div className="cm-cell" style={{ background: `rgba(200, 240, 0, ${getIntensity(tp)})` }}>
           <span className="cm-value">{tp}</span>
           <span className="cm-type">TP</span>
@@ -39,7 +39,7 @@ function ConfusionMatrix({ cm }) {
           <span className="cm-type">FN</span>
         </div>
 
-        <div className="cm-label-side">Neg (0)</div>
+        <div className="cm-label-side">{neg}</div>
         <div className="cm-cell" style={{ background: `rgba(245, 158, 11, ${getIntensity(fp)})` }}>
           <span className="cm-value">{fp}</span>
           <span className="cm-type">FP</span>
@@ -56,7 +56,7 @@ function ConfusionMatrix({ cm }) {
   );
 }
 
-function OutcomeCharts({ fairness }) {
+function OutcomeCharts({ fairness, classLabels }) {
   if (!fairness) return null;
 
   const { global_confusion_matrix, fairness_metrics } = fairness;
@@ -119,7 +119,7 @@ function OutcomeCharts({ fairness }) {
         <div className="chart-card">
           <h4>Performance Heatmap</h4>
           <div style={{ height: 450, display: 'flex', alignItems: 'center', width: '100%' }}>
-            <ConfusionMatrix cm={global_confusion_matrix} />
+            <ConfusionMatrix cm={global_confusion_matrix} classLabels={classLabels} />
           </div>
         </div>
       </div>

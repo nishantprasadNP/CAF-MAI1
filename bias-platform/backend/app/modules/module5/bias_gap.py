@@ -31,7 +31,7 @@ def compute_bias_gap(subgroup_metrics):
         # 🔹 FINAL GAP (blend + clamp)
         gap = 0.7 * raw_gap + 0.3 * robust_gap
 
-        # 🔥 CLAMP to avoid unrealistic 1.0 spikes
+        # Clamp to avoid unrealistic 1.0 spikes
         gap = min(max(gap, 0.0), 0.95)
 
         bias_gap[col] = {

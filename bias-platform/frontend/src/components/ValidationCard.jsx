@@ -1,5 +1,4 @@
 function ValidationCard({ validation }) {
-  // 🔥 SAFE EXTRACTION
   const action = validation?.action || "N/A";
   const status = validation?.status || "unknown";
   const alternative = validation?.alternative || "N/A";
@@ -8,15 +7,14 @@ function ValidationCard({ validation }) {
   const required = validation?.required_resources;
   const available = validation?.available_resources;
 
-  // 🔥 FORMAT
   const formatValue = (val) =>
     typeof val === "number" ? val : "N/A";
 
   // Determine badge class based on status
   const getStatusBadge = (status) => {
     const s = status.toLowerCase();
-    if (s.includes("not") || s.includes("fail")) return "badge error";
-    if (s.includes("pending") || s.includes("partial")) return "badge warning";
+    if (s.includes("not") || s.includes("fail") || s === "unknown") return "badge error";
+    if (s.includes("fallback") || s.includes("pending") || s.includes("partial")) return "badge warning";
     return "badge good";
   };
 

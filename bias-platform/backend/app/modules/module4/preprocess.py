@@ -1,11 +1,22 @@
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+
+MAX_CATEGORIES = 50
+
+
+def _to_string(data):
+    # Force categorical columns to a uniform string dtype so sklearn
+    # encoders never receive mixed float/str values.
+    # Plain array so feature names pass through by position ("one-to-one").
+    return np.asarray(data, dtype=object).astype(str)
 
 
 def build_preprocessor(x_df: pd.DataFrame) -> tuple[ColumnTransformer, list[str], list[str]]:
@@ -20,11 +31,11 @@ def build_preprocessor(x_df: pd.DataFrame) -> tuple[ColumnTransformer, list[str]
     )
     categorical_pipeline = Pipeline(
         steps=[
-            # Force categorical columns to a uniform string dtype so sklearn
-            # encoders never receive mixed float/str values.
-            ("to_string", FunctionTransformer(lambda data: pd.DataFrame(data).astype(str), validate=False)),
+            # Impute before stringifying, otherwise NaN becomes the literal "nan".
             ("imputer", SimpleImputer(strategy="constant", fill_value="missing")),
-            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+            ("to_string", FunctionTransformer(_to_string, validate=False, feature_names_out="one-to-one")),
+            # Rare categories are pooled so high-cardinality columns stay bounded.
+            ("encoder", OneHotEncoder(handle_unknown="infrequent_if_exist", max_categories=MAX_CATEGORIES)),
         ]
     )
 
@@ -38,93 +49,11 @@ def build_preprocessor(x_df: pd.DataFrame) -> tuple[ColumnTransformer, list[str]
 
 
 def sanitize_dataset(dataset: dict[str, Any]) -> tuple[pd.DataFrame, pd.Series]:
-    x = dataset.get("X", [])
-    y = dataset.get("Y", [])
-    if not x or not y:
+    x_df = pd.DataFrame(dataset.get("X"))
+    y_series = pd.Series(dataset.get("Y"), dtype="int64")
+    if x_df.empty or y_series.empty:
         raise ValueError("Dataset must include non-empty X and Y.")
 
-    x_df = pd.DataFrame(x)
-    y_series = pd.Series(y)
     if len(x_df) != len(y_series):
         raise ValueError("Length mismatch: X and Y must have same number of rows.")
     return x_df, y_series
-
-
-def resample_dataset(X, y):
-    """
-    Resample dataset to reduce class imbalance using SMOTE or manual oversampling.
-    
-    Args:
-        X: Features (DataFrame or array-like)
-        y: Labels (Series or array-like)
-        
-    Returns:
-        Tuple of (X_resampled, y_resampled) with balanced classes
-    """
-    import numpy as np
-    import pandas as pd
-    
-    # Convert to numpy arrays for consistent handling
-    if hasattr(X, 'values'):
-        X_array = X.values
-        X_is_df = True
-        original_columns = X.columns
-    else:
-        X_array = np.array(X)
-        X_is_df = False
-        original_columns = None
-    
-    if hasattr(y, 'values'):
-        y_array = y.values
-    else:
-        y_array = np.array(y)
-    
-    # Try importing SMOTE
-    try:
-        from imblearn.over_sampling import SMOTE
-        smote = SMOTE(random_state=42)
-        X_resampled, y_resampled = smote.fit_resample(X_array, y_array)
-    except ImportError:
-        # Manual oversampling implementation
-        # Find class counts
-        unique_classes, counts = np.unique(y_array, return_counts=True)
-        max_count = counts.max()
-        min_count = counts.min()
-        
-        # If already balanced, return original
-        if max_count == min_count:
-            return X, y
-        
-        # Identify minority and majority classes
-        minority_class = unique_classes[counts.argmin()]
-        majority_class = unique_classes[counts.argmax()]
-        
-        # Get samples for each class
-        minority_mask = (y_array == minority_class)
-        majority_mask = (y_array == majority_class)
-        
-        minority_X = X_array[minority_mask]
-        minority_y = y_array[minority_mask]
-        
-        majority_X = X_array[majority_mask]
-        majority_y = y_array[majority_mask]
-        
-        # Oversample minority class by duplicating
-        n_needed = max_count - len(minority_X)
-        n_repeats = (n_needed // len(minority_X)) + 1
-        oversampled_X = np.tile(minority_X, (n_repeats, 1))[:n_needed]
-        oversampled_y = np.tile(minority_y, n_repeats)[:n_needed]
-        
-        # Combine with majority class
-        X_resampled = np.vstack([majority_X, oversampled_X])
-        y_resampled = np.concatenate([majority_y, oversampled_y])
-    
-    # Convert back to original type
-    if X_is_df:
-        X_result = pd.DataFrame(X_resampled, columns=original_columns)
-        y_result = pd.Series(y_resampled)
-    else:
-        X_result = X_resampled
-        y_result = y_resampled
-    
-    return X_result, y_result

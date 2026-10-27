@@ -12,11 +12,13 @@ function FairnessPanel({ data, debias }) {
   const before = debias?.before;
   const after = debias?.after;
   const improvement = debias?.improvement;
+  // Matches the backend's mitigation threshold (module6 MIN_BIAS_GAP).
+  const alreadyFair = typeof before === "number" && before < 0.03;
 
-  // Determine badge class based on score
-  const getBadgeClass = (value, threshold = 0.2) => {
-    if (value <= threshold) return "badge good";
-    if (value <= threshold * 2) return "badge warning";
+  // Same bands as the backend's classify_bias: <0.1 low, <0.2 moderate, else high.
+  const getBadgeClass = (value) => {
+    if (value < 0.1) return "badge good";
+    if (value < 0.2) return "badge warning";
     return "badge error";
   };
 
@@ -52,7 +54,7 @@ function FairnessPanel({ data, debias }) {
               </div>
             </div>
             <div className="stat-back">
-              Percentage of correctly predicted outcomes across the entire dataset. A higher value indicates better general performance, but must be weighed against fairness metrics.
+              Percentage of correctly predicted outcomes on the held-out evaluation split (after bias mitigation). A higher value indicates better general performance, but must be weighed against fairness metrics.
             </div>
           </div>
         </div>
@@ -92,11 +94,11 @@ function FairnessPanel({ data, debias }) {
               <div className="value">{biasGap.toFixed(2)}</div>
               <div className="stat-desc" style={{marginBottom: "8px"}}>Difference across groups</div>
               <span className={getBadgeClass(biasGap)}>
-                {biasGap <= 0.1 ? "Good" : biasGap <= 0.2 ? "Moderate" : "High"}
+                {biasGap < 0.1 ? "Low" : biasGap < 0.2 ? "Moderate" : "High"}
               </span>
             </div>
             <div className="stat-back">
-              Calculates the maximum difference in predictive outcomes between the privileged and unprivileged groups defined by your sensitive attribute. 0.0 is perfect fairness.
+              Largest difference in positive-prediction rate between groups of your sensitive attribute, measured on the held-out split after mitigation. 0.0 means every group is approved at the same rate.
             </div>
           </div>
         </div>
@@ -109,11 +111,11 @@ function FairnessPanel({ data, debias }) {
           <div className="stat-body">
             <div className="stat-front">
               <div className="value">{fairnessCount}</div>
-              <div className="stat-desc" style={{marginBottom: "8px"}}>Total constraints evaluated</div>
+              <div className="stat-desc" style={{marginBottom: "8px"}}>Metrics evaluated</div>
               <span className="badge good">Active</span>
             </div>
             <div className="stat-back">
-              The number of distinct fairness tests successfully evaluated during model training, such as Demographic Parity, Equal Opportunity, and Predictive Equality.
+              Demographic parity, equal opportunity, equalized odds and predictive parity, computed per sensitive attribute on the held-out split.
             </div>
           </div>
         </div>
@@ -133,7 +135,7 @@ function FairnessPanel({ data, debias }) {
               <div className="stat-desc">Original disparity measure</div>
             </div>
             <div className="stat-back">
-              The initial bias gap measured in the raw data or baseline model before any algorithmic debiasing interventions were applied to the pipeline.
+              The bias gap of the baseline model on the held-out split, before any mitigation was applied.
             </div>
           </div>
         </div>
@@ -149,7 +151,7 @@ function FairnessPanel({ data, debias }) {
               <div className="stat-desc">Disparity after mitigation</div>
             </div>
             <div className="stat-back">
-              The updated bias gap achieved by the final model after running mitigation algorithms (like Reweighing or Exponentiated Gradient Reduction) to balance outcomes.
+              The bias gap on the same held-out split after mitigation: reweighing the training data plus group-specific decision thresholds fitted on the training split.
             </div>
           </div>
         </div>
@@ -162,17 +164,24 @@ function FairnessPanel({ data, debias }) {
           <div className="stat-body">
             <div className="stat-front">
               <div className="value">
-                {debias?.changed === false
+                {alreadyFair
                   ? "N/A"
                   : typeof improvement === "number"
                   ? improvement.toFixed(2)
                   : "—"}
               </div>
-              <div className="stat-desc" style={{marginBottom: "8px"}}>Net reduction in bias gap</div>
-              {debias?.changed === false && <span className="badge good">Already Fair</span>}
+              <div className="stat-desc" style={{marginBottom: "8px"}}>
+                Net reduction in bias gap
+                {typeof debias?.accuracy_before === "number" && typeof debias?.accuracy_after === "number" &&
+                  ` · accuracy ${(debias.accuracy_before * 100).toFixed(1)}% → ${(debias.accuracy_after * 100).toFixed(1)}%`}
+              </div>
+              {alreadyFair && <span className="badge good">Already Fair</span>}
+              {!alreadyFair && typeof improvement === "number" && improvement < 0 && (
+                <span className="badge error">Gap increased</span>
+              )}
             </div>
             <div className="stat-back">
-              The absolute numerical reduction in bias. Higher values indicate the intervention was highly successful at restoring equity without losing predictive utility.
+              Before minus after. Positive values mean mitigation reduced the gap; compare the accuracy change to see what it cost in predictive performance.
             </div>
           </div>
         </div>

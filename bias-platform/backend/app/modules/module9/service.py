@@ -29,7 +29,7 @@ def compute_required_resources(decision_output: dict[str, Any], action: str) -> 
 
     confidence = _safe_confidence(decision_output.get("confidence", 0.5))
 
-    # 🔥 stronger scaling (more realistic)
+    # Higher-confidence approvals commit more resources (1-10 units).
     required = max(1, min(10, int(confidence * 10)))
     return required
 
@@ -89,9 +89,10 @@ def validate_decision(
             "risk_level": risk_level,
 
             "reason": (
-                f"Decision is feasible with {required_resources} resources available. "
-                f"Risk level is {risk_level}."
-            ),
+                "Reject decision requires no resources. "
+                if action == "no_action"
+                else f"Decision needs {required_resources} of {available_resources} available resources. "
+            ) + f"Risk level is {risk_level}.",
         }
 
     # ---------------- FALLBACK ---------------- #
