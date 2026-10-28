@@ -5,7 +5,7 @@ from collections import OrderedDict
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import CORS_ORIGINS, MAX_SESSIONS, MAX_UPLOAD_MB
+from app.config import CORS_ORIGINS, MAX_ROWS, MAX_SESSIONS, MAX_UPLOAD_MB
 from app.pipeline_controller import BiasPipeline
 from app.schemas import DecisionRequest, InitContractRequest, RunPipelineRequest, SelectBiasRequest
 
@@ -58,13 +58,23 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/limits")
+def limits():
+    return {"max_rows": MAX_ROWS, "max_upload_mb": MAX_UPLOAD_MB}
+
+
 @app.post("/upload")
-async def upload(file: UploadFile = File(...), pipeline: BiasPipeline = Depends(get_pipeline)):
+def upload(file: UploadFile = File(...), pipeline: BiasPipeline = Depends(get_pipeline)):
+    # Sync handler: parsing runs in the threadpool, reading the spooled upload
+    # file directly instead of copying it into memory.
     max_bytes = int(MAX_UPLOAD_MB * 1024 * 1024)
-    content = await file.read(max_bytes + 1)
-    if len(content) > max_bytes:
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    if size == 0:
+        raise HTTPException(400, "Uploaded file is empty.")
+    if size > max_bytes:
         raise HTTPException(413, f"File is larger than {MAX_UPLOAD_MB:g} MB.")
-    return _run(pipeline, pipeline.upload_data, content)
+    return _run(pipeline, pipeline.upload_data, file.file)
 
 
 @app.post("/init_contract")

@@ -14,7 +14,7 @@ def compute_subgroup_metrics(df, y_true, y_pred, bias_columns):
         if col not in df.columns:
             continue
 
-        grouped = df.groupby(col)
+        grouped = df.groupby(col, observed=True)
         col_metrics = {}
 
         for val, g in grouped:

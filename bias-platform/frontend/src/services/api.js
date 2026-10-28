@@ -37,11 +37,25 @@ const api = axios.create({
 
 // ---------------- FILE UPLOAD ---------------- //
 
-export async function uploadFile(file) {
-  const formData = new FormData();
-  formData.append("file", file);
+export async function getLimits() {
+  try {
+    const res = await api.get("/limits");
+    return res.data;
+  } catch {
+    return { max_rows: 1_000_000 };
+  }
+}
 
-  const res = await api.post("/upload", formData, { timeout: DATA_TIMEOUT_MS });
+export async function uploadFile(blob, filename, onUploadPercent) {
+  const formData = new FormData();
+  formData.append("file", blob, filename);
+
+  const res = await api.post("/upload", formData, {
+    timeout: DATA_TIMEOUT_MS,
+    onUploadProgress: (e) => {
+      if (e.total) onUploadPercent?.(Math.round((e.loaded / e.total) * 100));
+    },
+  });
   return res.data;
 }
 

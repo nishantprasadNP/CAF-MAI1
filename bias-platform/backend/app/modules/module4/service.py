@@ -15,6 +15,7 @@ def run_module4(dataset: dict[str, Any]) -> dict[str, Any]:
             "train_rows": train_result["train_rows"],
             "train_rows_available": train_result["train_rows_available"],
             "test_rows": train_result["test_rows"],
+            "test_rows_available": train_result["test_rows_available"],
         },
         "preprocessing": train_result["preprocessing"],
     }

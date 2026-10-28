@@ -3,7 +3,8 @@ import ColumnSelector from "./components/ColumnSelector";
 import PipelineRunner from "./components/PipelineRunner";
 import ResultsDashboard from "./components/ResultsDashboard";
 import UploadPanel from "./components/UploadPanel";
-import { initContract, runPipeline, scoreRecord, selectBias, uploadFile } from "./services/api";
+import { getLimits, initContract, runPipeline, scoreRecord, selectBias, uploadFile } from "./services/api";
+import { prepareUpload } from "./services/prepareUpload";
 
 const steps = [
   { 
@@ -73,6 +74,9 @@ function App() {
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
+  // Step-by-step status shown in the overlay during uploads.
+  const [progressMsg, setProgressMsg] = useState("");
+  const [uploadNote, setUploadNote] = useState("");
   const [availableResources, setAvailableResources] = useState(8);
 
   // Continuously change loading text while the pipeline runs
@@ -90,6 +94,7 @@ function App() {
   }, [running]);
 
   const resetAll = () => {
+    setUploadNote("");
     setStep(0);
     setFile(null);
     setUploadData(null);
@@ -118,12 +123,30 @@ function App() {
     setSelectedBias([]);
     setResults(null);
     setStep(0);
+    setUploadNote("");
     try {
-      const data = await uploadFile(file);
+      const { max_rows: maxRows } = await getLimits();
+      const prepared = await prepareUpload(file, { maxRows, onPhase: setProgressMsg });
+
+      setProgressMsg("Uploading… 0%");
+      const data = await uploadFile(prepared.blob, prepared.filename, (pct) =>
+        setProgressMsg(pct < 100 ? `Uploading… ${pct}%` : "Processing on server…")
+      );
       setUploadData(data);
       setStep(1);
 
-      // Default the target to the last column; the user can change it.
+      const notes = [];
+      if (prepared.sampled) {
+        notes.push(
+          `Large file: analysing a random sample of ${prepared.keptRows.toLocaleString()} of ` +
+            `${prepared.totalRows.toLocaleString()} rows (record numbers refer to the sample).`
+        );
+      }
+      if (data.excluded_id_columns?.length) {
+        notes.push(`Identifier columns excluded from the analysis: ${data.excluded_id_columns.join(", ")}.`);
+      }
+      setUploadNote(notes.join(" "));
+
       // The backend suggests a two-valued column (e.g. "Survived", "isFraud").
       const defaultTarget = data.suggested_target || "";
       setTargetColumn(defaultTarget);
@@ -141,6 +164,7 @@ function App() {
       setError(formatApiError(err, "Upload failed."));
     } finally {
       setLoading(false);
+      setProgressMsg("");
     }
   };
 
@@ -269,6 +293,7 @@ function App() {
         </section>
 
         <UploadPanel file={file} loading={loading} onFileChange={setFile} onUpload={onUpload} />
+        {uploadNote && <p className="muted">{uploadNote}</p>}
 
         {uploadData && (
           <ColumnSelector
@@ -306,7 +331,7 @@ function App() {
               <div className="neural-node"></div>
               <div className="neural-node"></div>
             </div>
-            <p className="loading-text">{running ? loadingMsg : "Working... large files can take a minute"}</p>
+            <p className="loading-text">{running ? loadingMsg : progressMsg || "Working..."}</p>
           </div>
         </div>
       )}

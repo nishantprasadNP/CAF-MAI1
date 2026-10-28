@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Any
 import logging
@@ -7,11 +8,14 @@ import threading
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.csv as pacsv
 
 from app.config import MAX_BIAS_GROUPS
 from app.modules.module0.data_contract import DataContract
 from app.modules.module4.service import run_module4
-from app.modules.module5.service import run_module5
+from app.modules.module5.service import generate_ai_insight, run_module5
 from app.modules.module6.service import apply_debiasing, run_module6
 from app.modules.module8.decision import run_module8
 from app.modules.module9.service import validate_decision
@@ -38,14 +42,86 @@ def _deep_strip_runtime(obj: Any) -> Any:
     return obj
 
 
-def _read_csv(file_bytes: bytes) -> pd.DataFrame:
-    # Parse straight from bytes (no decoded copy of large files); latin-1 never fails.
+def _is_text(arrow_type) -> bool:
+    return pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type)
+
+
+def _read_arrow_compact(source, gzipped: bool) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Fast path: parse with Arrow, drop identifier columns and dictionary-encode
+    text *before* converting to pandas, so millions of Python string objects
+    are never created. UTF-8 only.
+    """
+    stream = pa.PythonFile(source, mode="r")
+    if gzipped:
+        stream = pa.CompressedInputStream(stream, "gzip")
+    table = pacsv.read_csv(stream)
+    n = table.num_rows
+
+    ids = [
+        name for name in table.column_names
+        if _is_text(table[name].type)
+        and DataContract.is_identifier(pc.count_distinct(table[name]).as_py(), n)
+    ]
+    table = table.drop_columns(ids)
+    for i, name in enumerate(table.column_names):
+        if pa.types.is_temporal(table[name].type):
+            # Keep dates as text, like the pandas reader does.
+            table = table.set_column(i, name, table[name].cast(pa.string()))
+        if _is_text(table[name].type):
+            table = table.set_column(i, name, pc.dictionary_encode(table[name]))
+
+    df = table.to_pandas()
+    del table
+    # Hand Arrow's read buffers back instead of keeping them pooled.
+    pa.default_memory_pool().release_unused()
+    return df, ids
+
+
+def _read_pandas_compact(source, gzipped: bool) -> tuple[pd.DataFrame, list[str]]:
+    """Fallback for non-UTF-8 files; latin-1 never fails to decode."""
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
         try:
-            return pd.read_csv(BytesIO(file_bytes), encoding=encoding, low_memory=False)
+            source.seek(0)
+            df = pd.read_csv(source, encoding=encoding, compression="gzip" if gzipped else None, low_memory=False)
+            break
         except UnicodeDecodeError:
             continue
-    raise ValueError("Could not decode the CSV file.")
+    else:
+        raise ValueError("Could not decode the CSV file.")
+
+    ids = DataContract.identifier_columns(df)
+    df = df.drop(columns=ids)
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].astype("category")
+    return df, ids
+
+
+def _read_csv(source) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Read a CSV (optionally gzip-compressed) from bytes or a binary file object.
+    Returns a compact frame (identifier columns dropped, text as categories,
+    integers downcast) and the names of the dropped identifier columns.
+    """
+    if isinstance(source, (bytes, bytearray)):
+        source = BytesIO(source)
+    source.seek(0)
+    gzipped = source.read(2) == b"\x1f\x8b"
+
+    try:
+        source.seek(0)
+        df, ids = _read_arrow_compact(source, gzipped)
+    except (pa.ArrowInvalid, UnicodeDecodeError) as e:
+        if "Empty CSV file" in str(e):
+            raise pd.errors.EmptyDataError(str(e))
+        logger.info("Arrow CSV parse failed (%s); falling back to pandas", str(e)[:120])
+        df, ids = _read_pandas_compact(source, gzipped)
+
+    for col in df.columns:
+        if pd.api.types.is_integer_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], downcast="integer")
+    return df, ids
 
 
 def _clean_feature_name(name: str) -> str:
@@ -103,16 +179,14 @@ class BiasPipeline:
         self._decision_state = None
         # Bias gap history per (columns, target, bias selection), for drift tracking.
         self._bias_history: dict[tuple, list[float]] = {}
+        self.excluded_id_columns: list[str] = []
 
     # ---------------- DATA ---------------- #
 
-    def upload_data(self, file_bytes: bytes):
-        if not file_bytes:
-            raise ValueError("Uploaded file is empty.")
-
-        logger.info("Reading CSV (%d bytes)", len(file_bytes))
+    def upload_data(self, source):
+        logger.info("Reading CSV")
         try:
-            df = _read_csv(file_bytes)
+            df, id_columns = _read_csv(source)
         except pd.errors.EmptyDataError:
             raise ValueError("Uploaded file has no columns. Is it a CSV?")
 
@@ -123,7 +197,11 @@ class BiasPipeline:
         if len(set(df.columns)) != len(df.columns):
             raise ValueError("CSV has duplicate column names.")
 
+        if df.shape[1] < 2:
+            raise ValueError("CSV needs at least two non-identifier columns (a target and a feature).")
+
         self.raw_df = df
+        self.excluded_id_columns = id_columns
         self.dataset = None
         self.bias_columns = []
         self.results = None
@@ -134,6 +212,7 @@ class BiasPipeline:
             "rows": len(df),
             "binary_columns": binary_columns,
             "suggested_target": _suggest_target(binary_columns),
+            "excluded_id_columns": id_columns,
         }
 
     def initialize_contract(self, target_column: str):
@@ -146,6 +225,9 @@ class BiasPipeline:
             bias_columns=[],
         )
         self.dataset = contract.build()
+        self.dataset["metadata"]["excluded_id_columns"] = (
+            self.excluded_id_columns + self.dataset["metadata"]["excluded_id_columns"]
+        )
         self.bias_columns = []
         self.results = None
         self._decision_state = None
@@ -195,12 +277,18 @@ class BiasPipeline:
         if state is None:
             raise ValueError("Run the pipeline before requesting a decision.")
 
-        n_rows = len(state["original_probs"])
+        X = state["X"]
+        n_rows = len(X)
         if not 0 <= row_index < n_rows:
             raise ValueError(f"row_index must be between 0 and {n_rows - 1}.")
 
-        p_orig = float(state["original_probs"][row_index])
-        p_used = float(state["debiased_probs"][row_index])
+        # Score just this record (never the whole dataset).
+        row = X.iloc[[row_index]]
+        p_orig = float(state["baseline"].predict_proba(row)[0, 1])
+        p_used = (
+            float(apply_debiasing(state["debias_runtime"], row)[1][0])
+            if state["debias_runtime"] else p_orig
+        )
 
         decision = run_module8(
             probabilities=[1 - p_used, p_used],
@@ -274,8 +362,11 @@ class BiasPipeline:
                 y_true=y_test,
                 y_pred=y_pred_after,
                 bias_columns=self.bias_columns,
-                explain=True,
             )
+            # Gemini is slow; ask for the fairness summary now and collect it
+            # after the decision, whose own explanation request runs meanwhile.
+            ai_pool = ThreadPoolExecutor(max_workers=1)
+            fairness_insight = ai_pool.submit(generate_ai_insight, module5_after["summary"])
 
             before_bias = module5_before["summary"]["bias_gap"]
             after_bias = module5_after["summary"]["bias_gap"]
@@ -289,15 +380,11 @@ class BiasPipeline:
             }
 
             # ================= PER-RECORD SCORING STATE ================= #
-            full_x = self.dataset["X"]
-            original_probs = baseline.predict_proba(full_x)[:, 1]
-            debiased_probs = (
-                apply_debiasing(debias_runtime, full_x)[1] if debias_runtime else original_probs
-            )
 
             self._decision_state = {
-                "original_probs": original_probs,
-                "debiased_probs": debiased_probs,
+                "X": self.dataset["X"],
+                "baseline": baseline,
+                "debias_runtime": debias_runtime,
                 "debiased": bool(debias_runtime),
                 "fairness": module5_after,
                 "top_features": _extract_top_features(baseline),
@@ -307,6 +394,8 @@ class BiasPipeline:
             # ================= MODULE 8 + 9 ================= #
             logger.info("M8/M9: decision + validation for row %d", row_index)
             bundle = self.decide(row_index, available_resources)
+            module5_after["insight"]["ai_explanation"] = fairness_insight.result()
+            ai_pool.shutdown()
 
             # ================= MODULE 11 ================= #
             logger.info("M11: monitoring")

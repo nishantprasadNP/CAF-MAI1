@@ -56,7 +56,7 @@ def compute_bias_gap_only(df, y_pred, bias_columns) -> float:
     return max_bias_gap(compute_bias_gap(subgroup_metrics=subgroup_metrics))
 
 
-def _generate_ai_insight(summary):
+def generate_ai_insight(summary):
     prompt = f"""
     Analyze fairness of a binary classification model:
 
@@ -161,7 +161,7 @@ def run_module5(df, y_true, y_pred, bias_columns, explain: bool = False):
 
     # ---------------- INTERPRETATION ---------------- #
     insight = _interpret_bias(summary["bias_gap"])
-    insight["ai_explanation"] = _generate_ai_insight(summary) if explain else None
+    insight["ai_explanation"] = generate_ai_insight(summary) if explain else None
 
     return {
         "accuracy": accuracy,

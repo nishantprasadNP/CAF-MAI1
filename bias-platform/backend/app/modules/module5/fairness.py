@@ -36,7 +36,7 @@ def compute_fairness_metrics(df, y_true, y_pred, bias_columns):
         tpr_values = []
         fpr_values = []
         precision_values = []
-        grouped = df.groupby(column)
+        grouped = df.groupby(column, observed=True)
 
         for subgroup_value, subgroup_df in grouped:
             idx = subgroup_df.index

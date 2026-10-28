@@ -9,7 +9,7 @@ def compute_intersectional_metrics(df, y_true, y_pred, bias_columns):
     y_true = y_true.reset_index(drop=True)
     y_pred = y_pred.reset_index(drop=True)
 
-    grouped = df.groupby(bias_columns)
+    grouped = df.groupby(bias_columns, observed=True)
     results = {}
 
     for key, g in grouped:

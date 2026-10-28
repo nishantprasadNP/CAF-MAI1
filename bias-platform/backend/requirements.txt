@@ -7,3 +7,4 @@ python-multipart==0.0.20
 pydantic==2.12.5
 google-genai==2.33.0
 python-dotenv==1.2.1
+pyarrow==22.0.0

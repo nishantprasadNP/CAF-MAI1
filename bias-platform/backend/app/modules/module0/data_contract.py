@@ -46,7 +46,10 @@ class DataContract:
         for col in df.columns:
             series = df[col]
 
-            if pd.api.types.is_bool_dtype(series):
+            if isinstance(series.dtype, pd.CategoricalDtype):
+                # Already compact (set at upload); just make sure categories are text.
+                df[col] = series.cat.rename_categories([str(c) for c in series.cat.categories])
+            elif pd.api.types.is_bool_dtype(series):
                 df[col] = series.astype(str)
             elif pd.api.types.is_numeric_dtype(series):
                 df[col] = pd.to_numeric(series, errors="coerce").astype(float).replace([np.inf, -np.inf], np.nan)
@@ -103,23 +106,24 @@ class DataContract:
     # ---------------- IDENTIFIER COLUMNS ---------------- #
 
     @staticmethod
-    def _identifier_columns(x: pd.DataFrame) -> list[str]:
+    def identifier_columns(x: pd.DataFrame) -> list[str]:
         """
         Text columns that are (nearly) unique per row, e.g. customer or
         transaction IDs. They carry no generalisable signal and would explode
         one-hot encoding, so they are excluded from modelling.
         """
         n = len(x)
+        return [
+            col for col in x.columns
+            if not pd.api.types.is_numeric_dtype(x[col])
+            and DataContract.is_identifier(x[col].nunique(dropna=True), n)
+        ]
+
+    @staticmethod
+    def is_identifier(distinct: int, n: int) -> bool:
         if n < 20:
-            return []
-        ids = []
-        for col in x.columns:
-            if pd.api.types.is_numeric_dtype(x[col]):
-                continue
-            distinct = x[col].nunique(dropna=True)
-            if distinct > 0.5 * n or (distinct > 1000 and distinct > 0.05 * n):
-                ids.append(col)
-        return ids
+            return False
+        return distinct > 0.5 * n or (distinct > 1000 and distinct > 0.05 * n)
 
     # ---------------- BUILD ---------------- #
 
@@ -130,12 +134,15 @@ class DataContract:
         dropped = len(self.df) - len(df)
 
         x = df.drop(columns=[self.target_column])
-        id_columns = self._identifier_columns(x)
+        id_columns = self.identifier_columns(x)
         x = self._normalize_column_types(x.drop(columns=id_columns))
         if x.shape[1] == 0:
             raise ValueError("No usable feature columns remain after excluding identifier columns.")
 
-        y, class_labels = self._encode_target(df[self.target_column])
+        target = df[self.target_column]
+        if isinstance(target.dtype, pd.CategoricalDtype):
+            target = target.astype(object)
+        y, class_labels = self._encode_target(target)
 
         return {
             "X": x,

@@ -171,3 +171,10 @@ def test_monitoring_detects_shift():
     out = run_monitoring(reference_df=ref, current_df=cur, fairness_output={"summary": {"bias_gap": 0}}, bias_history=[])
     assert out["data_drift"] > 0.15
     assert "'x'" in out["alerts"][0]
+
+
+def test_fairness_ignores_unused_categories():
+    df = pd.DataFrame({"g": pd.Categorical(["A", "A", "B", "B"], categories=["A", "B", "C"])})
+    out = run_module5(df=df, y_true=pd.Series([1, 0, 1, 0]), y_pred=pd.Series([1, 1, 0, 0]), bias_columns=["g"])
+    assert list(out["subgroup_metrics"]["g"]) == ["A", "B"]
+    assert list(out["fairness_metrics"]["g"]["groups"]) == ["A", "B"]

@@ -22,10 +22,13 @@ CORS_ORIGINS = [
 ]
 
 MAX_UPLOAD_MB = float(os.getenv("MAX_UPLOAD_MB", "1024"))
+# Larger files are randomly sampled to this many rows in the browser before
+# upload (much faster upload, bounded server memory). Lower it on small servers.
+MAX_ROWS = int(os.getenv("MAX_ROWS", "1000000"))
 
-# Large datasets: train on a stratified sample; fairness is still measured on
-# the full held-out split.
+# Large datasets: train and evaluate on stratified samples to bound memory and time.
 MAX_TRAIN_ROWS = int(os.getenv("MAX_TRAIN_ROWS", "500000"))
+MAX_EVAL_ROWS = int(os.getenv("MAX_EVAL_ROWS", "300000"))
 # A sensitive attribute needs a manageable number of groups (e.g. not an ID or a raw amount).
 MAX_BIAS_GROUPS = int(os.getenv("MAX_BIAS_GROUPS", "50"))
 MAX_SESSIONS = int(os.getenv("MAX_SESSIONS", "10"))

@@ -159,3 +159,32 @@ def test_cors_allows_render_frontend_only(client):
     assert ok.status_code == 200
     assert ok.headers["access-control-allow-origin"] == "https://bias-platform-frontend.onrender.com"
     assert preflight("https://evil.example.com").status_code == 400
+
+
+def test_gzip_upload_and_upload_time_id_exclusion(client):
+    import gzip as gz
+
+    n = 60
+    df = pd.DataFrame({
+        "account": [f"AC{i:05d}" for i in range(n)],
+        "opened": pd.date_range("2024-01-01", periods=n).strftime("%Y-%m-%d"),
+        "region": ["north", "south", "east"] * 20,
+        "label": ["yes", "no"] * 30,
+    })
+    r = client.post(
+        "/upload",
+        files={"file": ("d.csv.gz", gz.compress(df.to_csv(index=False).encode()), "application/gzip")},
+        headers=H,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["rows"] == n
+    assert "account" in body["excluded_id_columns"]
+    assert "account" not in body["columns"]
+    assert body["suggested_target"] == "label"
+    assert client.post("/init_contract", json={"target_column": "label"}, headers=H).status_code == 200
+
+
+def test_limits_endpoint(client):
+    body = client.get("/limits").json()
+    assert body["max_rows"] > 0 and body["max_upload_mb"] > 0
