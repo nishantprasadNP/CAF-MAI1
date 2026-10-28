@@ -24,7 +24,7 @@ CORS_ORIGINS = [
 MAX_UPLOAD_MB = float(os.getenv("MAX_UPLOAD_MB", "1024"))
 # Larger files are randomly sampled to this many rows in the browser before
 # upload (much faster upload, bounded server memory). Lower it on small servers.
-MAX_ROWS = int(os.getenv("MAX_ROWS", "1000000"))
+MAX_ROWS = int(os.getenv("MAX_ROWS", "100000"))
 
 # Large datasets: train and evaluate on stratified samples to bound memory and time.
 MAX_TRAIN_ROWS = int(os.getenv("MAX_TRAIN_ROWS", "500000"))

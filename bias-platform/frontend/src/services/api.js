@@ -42,7 +42,7 @@ export async function getLimits() {
     const res = await api.get("/limits");
     return res.data;
   } catch {
-    return { max_rows: 1_000_000 };
+    return { max_rows: 100_000 };
   }
 }
 

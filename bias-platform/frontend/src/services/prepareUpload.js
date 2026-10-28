@@ -2,8 +2,9 @@
 //
 // Large files are randomly sampled down to `maxRows` data rows (reservoir
 // sampling, one pass, no need to know the row count up front) and gzip-
-// compressed. A 471 MB / 6.3M-row CSV becomes ~29 MB, so the upload takes
-// seconds instead of minutes and the server never holds the whole file.
+// compressed. With the default 100,000-row limit a 471 MB / 6.3M-row CSV
+// becomes ~3 MB, so the upload takes seconds instead of minutes and the
+// server never holds the whole file.
 
 const SMALL_FILE_BYTES = 5 * 1024 * 1024;
 
