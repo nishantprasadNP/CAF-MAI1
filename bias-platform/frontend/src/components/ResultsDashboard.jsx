@@ -74,7 +74,12 @@ function ResultsDashboard({ results, loading, onScoreRecord }) {
           <h3>AI Explanation</h3>
           <AiAccordion
             title="Decision Explanation"
-            content={results.decision?.ai_explanation}
+            content={
+              results.decision?.ai_explanation ||
+              (results.decision?.ai_status === "not_configured"
+                ? "AI explanation unavailable: no Gemini API key is configured on the server (set GEMINI_API_KEY). See Feature Insights for the rule-based summary."
+                : "AI explanation unavailable: Gemini did not respond in time. Try again, or see Feature Insights for the rule-based summary.")
+            }
             icon={
               <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

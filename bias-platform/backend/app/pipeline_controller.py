@@ -124,24 +124,38 @@ def _read_csv(source) -> tuple[pd.DataFrame, list[str]]:
     return df, ids
 
 
-def _clean_feature_name(name: str) -> str:
-    for prefix in ("numeric__", "categorical__"):
-        if name.startswith(prefix):
-            return name[len(prefix):]
+def _clean_feature_name(name: str, categorical_columns: list[str]) -> str:
+    """'numeric__age' -> 'age'; 'categorical__type_PAYMENT' -> 'type = PAYMENT'."""
+    if name.startswith("numeric__"):
+        return name[len("numeric__"):]
+    if name.startswith("categorical__"):
+        rest = name[len("categorical__"):]
+        # Longest match first, in case one column name prefixes another.
+        for col in sorted(categorical_columns, key=len, reverse=True):
+            if rest.startswith(f"{col}_"):
+                value = rest[len(col) + 1:]
+                if value == "infrequent_sklearn":
+                    value = "(other categories)"
+                return f"{col} = {value}"
+        return rest
     return name
 
 
 def _extract_top_features(pipeline, limit: int = 5) -> dict[str, float]:
     try:
         model = pipeline.named_steps["model"]
-        feature_names = pipeline.named_steps["preprocessor"].get_feature_names_out()
+        preprocessor = pipeline.named_steps["preprocessor"]
+        feature_names = preprocessor.get_feature_names_out()
+        categorical_columns = [
+            str(c) for name, _, cols in preprocessor.transformers_ if name == "categorical" for c in cols
+        ]
         coefs = model.coef_[0]
     except Exception:
         logger.warning("Could not extract feature importance", exc_info=True)
         return {}
 
     ranked = sorted(zip(feature_names, coefs), key=lambda item: abs(item[1]), reverse=True)[:limit]
-    return {_clean_feature_name(str(name)): float(value) for name, value in ranked}
+    return {_clean_feature_name(str(name), categorical_columns): float(value) for name, value in ranked}
 
 
 def _binary_columns(df: pd.DataFrame) -> list[str]:
@@ -295,11 +309,14 @@ class BiasPipeline:
             original_probabilities=[1 - p_orig, p_orig],
             fairness_output=state["fairness"],
             top_features=state["top_features"],
+            target_column=state["target_column"],
+            class_labels=state["class_labels"],
         )
         decision["row_index"] = row_index
         decision["n_rows"] = n_rows
         decision["debiased"] = state["debiased"]
         decision["predicted_class"] = state["class_labels"].get(str(decision["label"]))
+        decision["target_column"] = state["target_column"]
 
         validation = validate_decision(decision, available_resources)
 
@@ -389,6 +406,7 @@ class BiasPipeline:
                 "fairness": module5_after,
                 "top_features": _extract_top_features(baseline),
                 "class_labels": self.dataset["metadata"]["class_labels"],
+                "target_column": self.dataset["metadata"]["target_column"],
             }
 
             # ================= MODULE 8 + 9 ================= #

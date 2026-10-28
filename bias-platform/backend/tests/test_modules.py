@@ -178,3 +178,29 @@ def test_fairness_ignores_unused_categories():
     out = run_module5(df=df, y_true=pd.Series([1, 0, 1, 0]), y_pred=pd.Series([1, 1, 0, 0]), bias_columns=["g"])
     assert list(out["subgroup_metrics"]["g"]) == ["A", "B"]
     assert list(out["fairness_metrics"]["g"]["groups"]) == ["A", "B"]
+
+
+def test_module8_wording_uses_target_and_no_duplicate_fallback():
+    result = run_module8(
+        probabilities=[0.9, 0.1],
+        original_probabilities=[0.9, 0.1],
+        fairness_output={"summary": {"bias_gap": 0.0}},
+        top_features={"amount": 1.5, "type = PAYMENT": -2.0},
+        target_column="isFraud",
+        class_labels={"0": "0", "1": "1"},
+    )
+    assert result["explanation"].startswith("Prediction: isFraud = 0 (confidence 0.90)")
+    assert "raises the odds of isFraud = 1" in result["explanation"]
+    assert "approv" not in result["explanation"].lower()
+    assert result["ai_explanation"] is None  # Gemini disabled in tests
+    assert result["ai_status"] == "not_configured"
+
+
+def test_clean_feature_name():
+    from app.pipeline_controller import _clean_feature_name
+
+    cats = ["type", "type_code"]
+    assert _clean_feature_name("numeric__amount", cats) == "amount"
+    assert _clean_feature_name("categorical__type_PAYMENT", cats) == "type = PAYMENT"
+    assert _clean_feature_name("categorical__type_code_A1", cats) == "type_code = A1"
+    assert _clean_feature_name("categorical__type_infrequent_sklearn", cats) == "type = (other categories)"

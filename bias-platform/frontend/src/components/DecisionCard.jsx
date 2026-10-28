@@ -1,17 +1,11 @@
 import { useState, useEffect } from "react";
+import { formatFeature } from "../utils/formatFeature";
 
 function riskClass(value) {
   const normalized = String(value || "").toLowerCase();
   if (normalized.includes("high")) return "badge error";
   if (normalized.includes("moderate")) return "badge warning";
   return "badge good";
-}
-
-function formatFeature(name) {
-  if (!name) return "";
-  return name
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function pct(probabilities) {
@@ -96,8 +90,10 @@ function DecisionCard({ decision, loading, onScoreRecord }) {
       </form>
 
       <p>
-        <strong>Decision:</strong> {decision?.decision || "N/A"}
-        {decision?.predicted_class != null && ` (predicted: ${decision.predicted_class})`}
+        <strong>Prediction:</strong>{" "}
+        {decision?.target_column && decision?.predicted_class != null
+          ? `${decision.target_column} = ${decision.predicted_class}`
+          : decision?.decision || "N/A"}
       </p>
       <p><strong>Confidence:</strong> {confidence}</p>
       <p>

@@ -25,8 +25,13 @@ if genai is not None and GEMINI_API_KEY:
         _CLIENT = None
 
 
+def is_configured() -> bool:
+    return _CLIENT is not None
+
+
 def _trim(text: str) -> str:
-    """Cap length at a sentence boundary instead of cutting mid-word."""
+    """Strip markdown symbols and cap length at a sentence boundary."""
+    text = text.replace("`", "").replace("**", "")
     if len(text) <= _MAX_CHARS:
         return text
     cut = text[:_MAX_CHARS]

@@ -112,6 +112,7 @@ function normalizeDecision(d = {}) {
   return {
     decision: d?.decision || "UNKNOWN",
     predicted_class: d?.predicted_class ?? null,
+    target_column: d?.target_column || "",
     confidence: d?.confidence ?? 0,
     bias_flag: d?.bias_flag || "unknown",
     bias_gap: d?.bias_gap ?? 0,
@@ -124,6 +125,7 @@ function normalizeDecision(d = {}) {
     explanation: d?.explanation || "",
     top_features: d?.top_features || [],
     ai_explanation: d?.ai_explanation || "",
+    ai_status: d?.ai_status || "",
   };
 }
 

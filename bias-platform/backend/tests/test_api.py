@@ -39,6 +39,8 @@ def test_full_pipeline(client, biased_df):
     features = [f["feature"] for f in decision["top_features"]]
     assert features, "top features should be extracted from the model"
     assert not any(f.startswith(("numeric__", "categorical__")) for f in features)
+    assert decision["target_column"] == "approved"
+    assert decision["explanation"].startswith("Prediction: approved = ")
     assert 0 < decision["probabilities"][1] < 1
 
     assert res["monitoring"]["trend"] == "baseline"

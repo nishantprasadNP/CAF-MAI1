@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-
-function formatFeature(name) {
-  if (!name) return "";
-  return name
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
+import { formatFeature } from "../utils/formatFeature";
 
 function ExplainabilityPanel({ explainability }) {
   const features = explainability?.top_features || [];
