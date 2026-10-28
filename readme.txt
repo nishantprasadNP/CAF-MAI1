@@ -5,7 +5,7 @@
   What it is   A web app that trains a classifier on an uploaded CSV, measures
                whether its outcomes differ across groups (e.g. gender), applies
                bias mitigation, and explains individual decisions.
-  Stack        Python 3.11-3.14 / FastAPI / scikit-learn / pandas  (backend)
+  Stack        Python 3.11+ / FastAPI / scikit-learn / pandas      (backend)
                React 19 / Vite 4 / Recharts / Axios               (frontend)
                Google Gemini (optional, for natural-language explanations)
   Status       Working end to end. 32 backend tests pass. Verified in a
@@ -31,13 +31,18 @@
 1. QUICK START
 ================================================================================
 
-Prerequisites: Python 3.11+ and Node.js 18+ (with npm) on PATH.
+Prerequisites: Python 3.11+ and Node.js (with npm) on PATH. Vite 4 needs
+Node 14.18+ or 16+; the app has been run with Node 22. Python has been tested
+on 3.11, 3.13 and 3.14.
 
   Terminal 1 (backend):
       ./run-backend.sh            (Windows: .\run-backend.ps1)
 
   Terminal 2 (frontend), after the backend says it is running:
       ./run-frontend.sh           (Windows: .\run-frontend.ps1)
+
+  The bash scripts are tested on macOS. The PowerShell scripts mirror them
+  but have not been run on Windows.
 
   Then open the "Local:" URL Vite prints, normally http://127.0.0.1:5173
 
@@ -54,8 +59,9 @@ What the scripts do:
 
 Optional AI explanations: create bias-platform/backend/.env containing
       GEMINI_API_KEY=your_key
-Without a key everything still works; explanations fall back to rule-based
-text. The .env file is git-ignored.
+Without a key everything still works: the decision and monitoring
+explanations fall back to rule-based text, and the AI fairness summary is
+simply omitted. The .env file is git-ignored.
 
 
 ================================================================================
@@ -74,10 +80,12 @@ text. The .env file is git-ignored.
      after mitigation, a decision for one record (choose any record number and
      click "Score record"), feasibility, monitoring and explanations.
 
-Good test datasets: Titanic (target Survived, attribute Sex or Pclass), Adult
-Income (target income, attribute sex/race), German Credit. The PaySim fraud
-dataset runs fine but has no demographic attribute, so it says little about
-bias.
+Datasets it has been run on: a synthetic loan dataset (target approved,
+attribute gender), a Titanic-style dataset (target Survived, attribute Sex),
+and the PaySim fraud dataset (target isFraud, attribute type). PaySim runs
+fine but has no demographic attribute, so it says little about bias. Public
+datasets that fit the requirements (untested here) include Titanic and Adult
+Income.
 
 
 ================================================================================
@@ -301,7 +309,7 @@ is enforced on pipeline runs (deliberate UX choice).
 9. PERFORMANCE AND LIMITS
 ================================================================================
 
-Measured on an Apple Silicon Mac:
+Measured on an Apple Silicon Mac (single runs, not a benchmark):
 
   Dataset                          Upload   Set target   Pipeline   Memory
   500 rows, 5 columns              <1 s     <1 s         ~3 s*      small
@@ -309,8 +317,12 @@ Measured on an Apple Silicon Mac:
                                                                      session
   * includes the 3 s minimum loading animation.
 
-  Gemini adds up to ~10-20 s per call when the service is slow (up to two
-  calls per run, one per "Score record"). Use the lite model to keep it fast.
+  Gemini: a run makes up to three explanation requests (fairness summary,
+  decision, and a drift explanation only when the bias gap moved by more
+  than 0.10 since the previous run); "Score record" makes one. Each request
+  tries the primary model and then the fallback, with a 10 s timeout each,
+  so a slow Gemini can add up to ~20 s per request. The lite model is the
+  default because it is usually fastest.
 
 Hard limits: 1 GB upload, binary targets only, <= 50 groups per attribute,
 >= 20 rows. Memory: with 10 sessions each holding a multi-million-row file,
@@ -327,8 +339,9 @@ LOW = polish.
 10.1 Methodology (what the numbers mean)
 
   [HIGH] The sensitive attribute is a model input, and group thresholds need
-         it at decision time. Treating people differently by group is
-         explicitly regulated in lending, hiring and insurance. Offer a
+         it at decision time. Using protected characteristics in decisions
+         is restricted in many jurisdictions for lending, hiring and
+         insurance (check the rules that apply to your use case). Offer a
          "fairness through unawareness" option that excludes the attribute
          from features, and document when group-aware thresholds are allowed.
 
@@ -340,7 +353,8 @@ LOW = polish.
   [HIGH] Mitigation optimises demographic parity only and can overshoot. In
          a 500-row test the gap flipped direction (men favoured before,
          women after). With small test splits, group rates carry large
-         sampling error (+/- 0.1 at ~50 rows per group). Add confidence
+         sampling error: with ~50 rows in a group, a 95% interval on its
+         positive rate is roughly +/- 0.14. Add confidence
          intervals (bootstrap), a minimum group size, and a choice of
          criterion (demographic parity vs equalised odds).
 
@@ -404,9 +418,10 @@ LOW = polish.
          Pydantic response models and generate client types (or move the
          frontend to TypeScript).
 
-  [LOW]  Frontend: no tests; 1,600-line global stylesheet; 634 KB bundle
-         (mostly Recharts; code-split the dashboard); formatFeature is
-         duplicated in two components.
+  [LOW]  Frontend: no tests; 1,600-line global stylesheet; a single 635 KB
+         JavaScript bundle (Vite warns above 500 KB; code-splitting the
+         dashboard would help); formatFeature is duplicated in two
+         components.
 
   [LOW]  Backend: thresholds and magic numbers are spread across modules;
          collect them in config.py. fairness_before, intersectional metrics,
