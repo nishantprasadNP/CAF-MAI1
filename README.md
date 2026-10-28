@@ -131,7 +131,7 @@ GEMINI_API_KEY=your_key_here
 GEMINI_MODEL=gemini-3.5-flash-lite
 GEMINI_FALLBACK_MODEL=gemini-3.8-flash
 GEMINI_TIMEOUT_MS=10000   # Gemini's minimum; lower values are raised to 10000
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://bias-platform-frontend.onrender.com
 MAX_UPLOAD_MB=1024
 MAX_SESSIONS=10
 ```

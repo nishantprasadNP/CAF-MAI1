@@ -142,3 +142,20 @@ def test_init_contract_does_not_return_rows(client, biased_df):
     body = client.post("/init_contract", json={"target_column": "approved"}, headers=H).json()
     assert "X" not in body and "Y" not in body
     assert body["rows"] == 400
+
+
+def test_cors_allows_render_frontend_only(client):
+    def preflight(origin):
+        return client.options(
+            "/upload",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "x-session-id",
+            },
+        )
+
+    ok = preflight("https://bias-platform-frontend.onrender.com")
+    assert ok.status_code == 200
+    assert ok.headers["access-control-allow-origin"] == "https://bias-platform-frontend.onrender.com"
+    assert preflight("https://evil.example.com").status_code == 400
